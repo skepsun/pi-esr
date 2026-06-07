@@ -13,7 +13,7 @@ npm install -g pi-esr
 pi-esr setup
 ```
 
-That's it. Claude Code, Cursor, OpenCode, and Pi Agent are now configured with 17 ESR tools.
+That's it. Claude Code, Cursor, OpenCode, and Pi Agent are now configured with 17 ESR tools (13 graph/runtime + 4 memory).
 
 **From source:**
 ```bash
