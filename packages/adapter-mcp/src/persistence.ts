@@ -10,7 +10,7 @@ import { join } from "node:path";
 import type { ESRPersistedState } from "@pi-esr/core";
 
 const SNAPSHOT_PATH =
-  process.env.ESR_SNAPSHOT_PATH ?? join(process.cwd(), ".esr-snapshot.json");
+  process.env.ESR_SNAPSHOT_PATH ?? join(process.cwd(), ".pi-esr-memory", "esr-state.json");
 
 export function persist(state: ESRPersistedState): void {
   writeFileSync(SNAPSHOT_PATH, JSON.stringify(state, null, 2), "utf-8");
