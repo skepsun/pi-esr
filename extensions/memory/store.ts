@@ -28,7 +28,16 @@ export interface JournalEntry {
   created_at: string;
 }
 
-const DB_DIR = join(homedir(), ".pi-esr-memory");
+/**
+ * Database directory, configurable via PI_ESR_MEMORY_DIR environment variable.
+ * Defaults to ~/.pi-esr-memory for cross-session persistence.
+ * Set to a session-scoped path (e.g. in CI) to avoid cross-session contamination.
+ *
+ * Multiple concurrent sessions sharing the same directory is intentional —
+ * the WAL journal mode handles concurrent reads safely, and entity_id
+ * anchoring ensures per-entity isolation.
+ */
+const DB_DIR = process.env.PI_ESR_MEMORY_DIR ?? join(homedir(), ".pi-esr-memory");
 const DB_PATH = join(DB_DIR, "memory.db");
 
 function ensureDir(): void {

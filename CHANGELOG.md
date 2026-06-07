@@ -11,10 +11,10 @@
 - Token compression, prefix-cache stability, cost projection validation
 
 ### Changed
-- README updated to reflect 121 tests, 16 tools, memory module architecture
+- README updated to reflect 124 tests, 16 tools, memory module architecture
 
 ### Fixed
-- Test count discrepancy in README (85 → 121)
+- Test count discrepancy in README (85 → 124)
 
 ## [0.1.0] — 2026-05-31
 

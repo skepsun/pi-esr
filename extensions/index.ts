@@ -81,32 +81,38 @@ export default function (pi: ExtensionAPI) {
   // Auto-journal: wire state change hook so every entity state transition
   // is recorded in the journal and as a memory observation — no manual
   // esr_mem_journal calls needed for standard state changes.
-  void (async () => {
-    const mem = await ensureMemory();
-    if (mem) {
-      graph.setStateChangeHook((entityId, oldState, newState, label) => {
-        const transition = `${oldState} → ${newState}`;
-        mem.journal(entityId, transition);
-        const desc = label ? ` ${label}` : "";
-        mem.store(entityId, `${transition}${desc}`, {
-          tags: ["state-transition", `from:${oldState}`, `to:${newState}`],
-        });
-        // When a task reaches stable, also store a completion observation
-        if (newState === "stable") {
-          const entity = graph.getEntity(entityId);
-          if (entity?.role === "Task") {
-            const metrics = Object.entries(entity.metrics)
-              .map(([k, v]) => `${k}=${v}`)
-              .join(", ");
-            mem.store(entityId, `Task completed: ${entity.label ?? entityId}${metrics ? ` (${metrics})` : ""}`, {
-              tags: ["task-completed", "stable"],
-            });
+  // Fire-and-forget async IIFE with explicit error handling to avoid
+  // unhandled promise rejections if memory layer fails to initialise.
+  (async () => {
+    try {
+      const mem = await ensureMemory();
+      if (mem) {
+        graph.setStateChangeHook((entityId, oldState, newState, label) => {
+          const transition = `${oldState} → ${newState}`;
+          mem.journal(entityId, transition);
+          const desc = label ? ` ${label}` : "";
+          mem.store(entityId, `${transition}${desc}`, {
+            tags: ["state-transition", `from:${oldState}`, `to:${newState}`],
+          });
+          // When a task reaches stable, also store a completion observation
+          if (newState === "stable") {
+            const entity = graph.getEntity(entityId);
+            if (entity?.role === "Task") {
+              const metrics = Object.entries(entity.metrics)
+                .map(([k, v]) => `${k}=${v}`)
+                .join(", ");
+              mem.store(entityId, `Task completed: ${entity.label ?? entityId}${metrics ? ` (${metrics})` : ""}`, {
+                tags: ["task-completed", "stable"],
+              });
+            }
           }
-        }
-      });
+        });
 
-      const { registerMemoryTools } = await import("./memory/tools");
-      registerMemoryTools(pi, mem);
+        const { registerMemoryTools } = await import("./memory/tools");
+        registerMemoryTools(pi, mem);
+      }
+    } catch (err) {
+      console.error("[pi-esr] Memory layer initialisation failed:", err);
     }
   })();
 }

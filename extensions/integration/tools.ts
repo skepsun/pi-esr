@@ -41,6 +41,10 @@ function asMetricRecord(value: unknown): Record<string, number> | undefined {
   for (const [key, metricValue] of Object.entries(record)) {
     if (typeof metricValue === "number") {
       metrics[key] = metricValue;
+    } else if (metricValue !== undefined) {
+      // Silently skip non-numeric values (LLM may pass stringified numbers),
+      // but log a warning so operators can spot malformed parameters.
+      console.warn(`[pi-esr] Metric "${key}" has non-numeric value (${typeof metricValue}), skipping`);
     }
   }
   return metrics;

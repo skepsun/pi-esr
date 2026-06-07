@@ -12,7 +12,7 @@ npm install
 
 | Command | Description |
 |---------|-------------|
-| `npm test` | Run all 121 tests via vitest |
+| `npm test` | Run all 124 tests via vitest |
 | `npm run test:watch` | Watch mode |
 | `npm run typecheck` | TypeScript type checking (`tsc --noEmit`) |
 | `npm run build` | Compile TypeScript to `dist/` |

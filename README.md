@@ -10,7 +10,7 @@ A constrained semantic graph state machine for engineering, documentation, and d
 
 ```bash
 pi install ./pi-esr
-npm test                    # 121 tests
+npm test                    # 124 tests
 npm run typecheck           # Zero errors
 ```
 
@@ -137,10 +137,10 @@ tests/
 
 ## Validation
 
-### Correctness (121 tests, 7 test files)
+### Correctness (124 tests, 7 test files)
 
 ```bash
-npm test                    # 121 tests, <1s
+npm test                    # 124 tests, <1s
 npm run typecheck           # tsc --noEmit, zero errors
 ```
 
@@ -164,11 +164,11 @@ npx vitest run tests/validate-efficiency.test.ts --reporter=verbose
 
 | Entities | ESR context | Chat equivalent | Ratio | Savings |
 |----------|-------------|-----------------|-------|---------|
-| 5 | 138t | 210t | 1.5x | 34% |
-| 10 | 260t | 435t | 1.7x | 40% |
-| 20 | 515t | 897t | 1.7x | 43% |
-| 50 | 1280t | 2285t | 1.8x | 44% |
-| 100 | 2555t | 4597t | 1.8x | 44% |
+| 5 | 138t | 210t | 1.5x | 34.3% |
+| 10 | 260t | 435t | 1.7x | 40.2% |
+| 20 | 515t | 897t | 1.7x | 42.6% |
+| 50 | 1280t | 2285t | 1.8x | 44.0% |
+| 100 | 2555t | 4597t | 1.8x | 44.4% |
 
 ESR context is ~1.8x more compact than equivalent chat history at scale.
 
@@ -178,6 +178,7 @@ ESR context is ~1.8x more compact than equivalent chat history at scale.
 - Adding/removing entities → fingerprint changes (correct cache miss)
 - Context output is **byte-for-byte deterministic** — DeepSeek/Claude prefix cache compatible
 - Per-entity overhead: ~11 tokens (linear O(n), no quadratic blowup)
+- Per-relation overhead: ~18 tokens (entity + relation, linear O(n))
 
 #### DAG Parallelism
 
@@ -190,7 +191,7 @@ ESR context is ~1.8x more compact than equivalent chat history at scale.
 
 For a 100-entity session with 50 turns:
 - Chat history cost (no cache): ~$0.032
-- ESR with prefix-cache hits: ~$0.002
+- ESR with prefix-cache hits: ~$0.0015
 - **Estimated savings per session: $0.03+** (compounds across many sessions)
 ```
 

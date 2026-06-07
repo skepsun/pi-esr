@@ -310,6 +310,46 @@ describe("Artifact", () => {
     g.upsertArtifact({ id: "a1", type: "document", sections: [{ name: "s1", state: "stable" }] });
     expect(g.getArtifact("a1")?.version).toBe(1);
   });
+
+  it("creates an entity proxy so relations can target the artifact", () => {
+    const g = new ESRGraph();
+    g.upsertArtifact({ id: "report-1", type: "report", sections: [{ name: "summary", state: "draft" }] });
+
+    // Auto-created Artifact entity proxy
+    const proxy = g.getEntity("report-1");
+    expect(proxy).toBeDefined();
+    expect(proxy!.role).toBe("Artifact");
+    expect(proxy!.state).toBe("stable");
+    expect(proxy!.confidence).toBe(1.0);
+    expect(proxy!.metrics.version).toBe(1);
+    expect(proxy!.label).toContain("report-1");
+    expect(proxy!.label).toContain("report");
+  });
+
+  it("updates existing entity proxy version on re-upsert", async () => {
+    const g = new ESRGraph();
+    g.upsertArtifact({ id: "doc-1", type: "document", sections: [] });
+    const originalUpdatedAt = g.getEntity("doc-1")!.updated_at;
+
+    // Wait a tick so timestamps differ
+    await new Promise(r => setTimeout(r, 10));
+    g.upsertArtifact({ id: "doc-1", type: "document", version: 3, sections: [{ name: "s2", state: "stable" }] });
+
+    const proxy = g.getEntity("doc-1")!;
+    expect(proxy.metrics.version).toBe(3);
+    expect(proxy.updated_at).not.toBe(originalUpdatedAt);
+  });
+
+  it("does not duplicate entity proxy on re-upsert", () => {
+    const g = new ESRGraph();
+    g.upsertArtifact({ id: "spec-1", type: "spec", sections: [] });
+    const entityCount = g.getAllEntities().length;
+
+    g.upsertArtifact({ id: "spec-1", type: "spec", sections: [{ name: "intro", state: "editing" }] });
+    // Still only one entity for this artifact
+    expect(g.getAllEntities().filter(e => e.entity_id === "spec-1")).toHaveLength(1);
+    expect(g.getAllEntities()).toHaveLength(entityCount); // no new entity created
+  });
 });
 
 // ═══════════════════════════════════════════════════════════
