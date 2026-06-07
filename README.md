@@ -10,7 +10,7 @@ A constrained semantic graph state machine for engineering, documentation, and d
 
 ```bash
 pi install ./pi-esr
-npm test                    # 100 tests
+npm test                    # 121 tests
 npm run typecheck           # Zero errors
 ```
 
@@ -40,6 +40,16 @@ pi-esr transforms user requests into structured entities, typed relations, expli
 | `esr_remove_entity` | Remove an entity and cascade-delete all its relations |
 | `esr_remove_relation` | Remove a specific relation between two entities |
 | `esr_create_node` | Create a runtime execution node for the DAG engine |
+| `esr_run` | Execute all pending runtime nodes until idle (zero-token DAG dispatch) |
+
+### Memory Tools (optional — requires `better-sqlite3`)
+
+| Tool | Description |
+|------|-------------|
+| `esr_mem_store` | Store an observation anchored to an ESR entity |
+| `esr_mem_recall` | Recall memories by entity_id, text search, or both |
+| `esr_mem_timeline` | Chronological timeline of all observations about an entity |
+| `esr_mem_journal` | View entity state transition journal or record manual entry |
 
 ## Commands
 
@@ -109,6 +119,11 @@ extensions/
 │   ├── runtime-types.ts      ExecutionNode, RuntimeEvent, etc.
 │   └── drivers/
 │       └── tool-driver.ts    ToolDriverRegistry
+├── memory/
+│   ├── store.ts              MemoryStore — SQLite-backed observation storage
+│   ├── recall.ts             Entity-anchored memory context builder
+│   ├── journal.ts            State transition journal + summaries
+│   └── tools.ts              4 esr_mem_* tool registrations
 ├── prompt.ts                 Prompt context builder
 └── index.ts                  Entry point (thin orchestration)
 tests/
@@ -117,14 +132,15 @@ tests/
 ├── planner.test.ts           4 tests (ready/waiting/blocked node classification)
 ├── runtime.test.ts           7 tests (execute, cache hit, invalidation cascade)
 ├── tools.test.ts             24 tests (all 11 tool drivers, scheduler, contexts, reconstruct validation)
+├── memory.test.ts            24 tests (store CRUD, recall, journal, context builder)
 └── validate-efficiency.test.ts 15 token/cost/DAG benchmarks
 
 ## Validation
 
-### Correctness (85 tests, 6 test files)
+### Correctness (121 tests, 7 test files)
 
 ```bash
-npm test                    # 85 tests, <1s
+npm test                    # 121 tests, <1s
 npm run typecheck           # tsc --noEmit, zero errors
 ```
 
@@ -135,6 +151,8 @@ npm run typecheck           # tsc --noEmit, zero errors
 | Runtime | 7 | Tick execution, cache hit, invalidation cascade, persisted state roundtrips, reconstruct |
 | Cache | 4 | SHA256 key determinism, input-change detection, artifact version impact, persistence roundtrip |
 | Planner | 4 | Dependency-satisfied/none/pending, blocked-by-failure classification |
+| Memory | 24 | Store CRUD, recall/search/timeline, journal, context builder, format helpers, entity ID extraction |
+| Efficiency | 15 | Token compression benchmarks, prefix-cache stability, context growth rate, cost projection, DAG parallelism |
 
 ### Efficiency Benchmarks
 

@@ -28,6 +28,13 @@ export class ESRGraph {
   private artifacts = new Map<string, ESRArtifact>();
   private version = 0;
 
+  /** Callback: (entityId, oldState, newState, label?) — set by index.ts for auto-journal. */
+  private onStateChange?: (entityId: string, oldState: string, newState: string, label?: string) => void;
+
+  setStateChangeHook(hook: (entityId: string, oldState: string, newState: string, label?: string) => void): void {
+    this.onStateChange = hook;
+  }
+
   getVersion(): number {
     return this.version;
   }
@@ -84,9 +91,11 @@ export class ESRGraph {
       entity.confidence = confidence;
     }
     if (metrics !== undefined) entity.metrics = { ...entity.metrics, ...metrics };
+    const oldState = entity.state;
     entity.state = state;
     this.touch(entity);
     this.version++;
+    this.onStateChange?.(id, oldState, state, entity.label);
     return { ok: true };
   }
 
@@ -160,7 +169,9 @@ export class ESRGraph {
     return this.relations.filter(r => r.type === type);
   }
 
-  /** Upsert an artifact. Auto-increments version when omitted. */
+  /** Upsert an artifact. Auto-increments version when omitted.
+   *  Also creates a Concept entity proxy (id = artifact id) so relations
+   *  like `produces` can target artifacts without workarounds. */
   upsertArtifact(artifact: ESRArtifact): { ok: true } | { ok: false; error: string } {
     if (!validateArtifactType(artifact.type)) return { ok: false, error: `Invalid artifact type: ${artifact.type}` };
     for (const s of artifact.sections) {
@@ -177,6 +188,23 @@ export class ESRGraph {
       version,
       sections: artifact.sections.map(s => ({ name: s.name, state: s.state })),
     });
+    // Auto-create entity proxy so relations can target this artifact
+    if (!this.entities.has(artifact.id)) {
+      this.entities.set(artifact.id, {
+        entity_id: artifact.id,
+        role: "Artifact",
+        state: "stable",
+        confidence: 1.0,
+        metrics: { version },
+        label: `${artifact.id} [${artifact.type}]`,
+        updated_at: new Date().toISOString(),
+      });
+    } else {
+      // Update existing entity proxy metrics
+      const proxy = this.entities.get(artifact.id)!;
+      proxy.metrics = { ...proxy.metrics, version };
+      this.touch(proxy);
+    }
     this.version++;
     return { ok: true };
   }
@@ -234,9 +262,11 @@ export class ESRGraph {
     if (!canTransition(entity.state, newState)) {
       return { ok: false, error: `Invalid transition: ${entity.state} → ${newState}` };
     }
+    const oldState = entity.state;
     entity.state = newState;
     this.touch(entity);
     this.version++;
+    this.onStateChange?.(entityId, oldState, newState, entity.label);
     return { ok: true };
   }
 

@@ -444,6 +444,16 @@ export function registerTools(
         node: runtimeStore.getNode(params.node_id),
       });
     },
+    renderResult(result, _options, theme) {
+      const first = result.content?.[0];
+      const raw = first?.type === "text" ? first.text : "";
+      const details = result.details as Record<string, unknown> | undefined;
+      const node = details?.node as Record<string, unknown> | undefined;
+      const deps = Array.isArray(node?.dependencies) && (node.dependencies as string[]).length > 0
+        ? ` → ${(node.dependencies as string[]).join(", ")}`
+        : "";
+      return new Text(`${theme.fg("accent", "◉")} ${raw}${theme.fg("dim", deps)}`, 0, 0);
+    },
   });
 
   pi.registerTool({
@@ -464,6 +474,16 @@ export function registerTools(
         `Runtime complete: ${succeeded} succeeded, ${failed} failed, ${results.length} total. Final: ${last?.status ?? "idle"}`,
         { action: "esr_run", results },
       );
+    },
+    renderResult(result, _options, theme) {
+      const first = result.content?.[0];
+      const raw = first?.type === "text" ? first.text : "";
+      // Style succeeded count with accent, failed count with dim (dim = gray in most themes)
+      const styledText = raw
+        .replace(/(\d+) succeeded/, (_, n: string) => `${theme.bold(n)} ${theme.fg("dim", "succeeded")}`)
+        .replace(/(\d+) failed/, (_, n: string) => `${theme.fg("dim", n)} ${theme.fg("dim", "failed")}`)
+        .replace(/Final:/, () => theme.fg("dim", "Final:"));
+      return new Text(`${theme.fg("accent", "▶")} ${styledText}`, 0, 0);
     },
   });
 }

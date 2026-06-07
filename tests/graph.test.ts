@@ -328,7 +328,7 @@ describe("Serialization", () => {
     const g2 = new ESRGraph();
     g2.loadFromState(state);
 
-    expect(g2.getAllEntities()).toHaveLength(2);
+    expect(g2.getAllEntities()).toHaveLength(3); // 2 user + 1 artifact auto-proxy
     expect(g2.getAllRelations()).toHaveLength(1);
     expect(g2.getAllArtifacts()).toHaveLength(1);
   });

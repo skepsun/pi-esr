@@ -65,6 +65,32 @@ You have the following ESR tools available:
 5. If it cannot be represented in ontology → DO NOT STORE
 6. If it does not affect future decisions → DO NOT STORE
 
+## Task Completion Protocol (MANDATORY)
+
+When you promote a task to `stable` or complete significant work on any entity, you MUST execute the following closure sequence. These operations ensure the ESR graph is queryable, auditable, and capable of supporting future decisions.
+
+### For every task reaching `stable`:
+
+1. **Create Artifact** — `esr_update_artifact` for every file produced or modified (code, document, report, spec)
+2. **Link produces** — `esr_link_relation`: task `--[produces]-->` artifact
+3. **Record Evaluation** — `esr_evaluate` with objective metrics (test count, typecheck errors, lines changed, etc.)
+4. **Store Memory** — `esr_mem_store` summarizing key observations: what was done, why, and any caveats
+5. **Group under Concept** — if multiple tasks belong to a larger initiative, create a Concept and link each task via `part_of`
+
+### For every group of related tasks:
+
+6. **Create Actor** — who executed these tasks (an agent, a reviewer, a system)
+7. **Link evaluates** — Actor `--[evaluates]-->` each task with confidence and metrics
+8. **Apply Constraint** — `esr_apply_constraint` for quality gates (e.g. "all tests must pass before stable")
+
+### Verification checklist (before calling a task done):
+
+- [ ] Task entity exists with `state=stable`
+- [ ] At least one artifact linked via `produces`
+- [ ] Evaluation recorded with concrete metrics
+- [ ] Memory observation stored summarizing the work
+- [ ] If part of a group: Concept + Actor + `part_of` relations present
+
 ## Cache Stability Rules (CRITICAL)
 
 The ESR context block is designed for LLM prefix-cache stability. Violating these rules causes cache misses and unnecessary token cost.

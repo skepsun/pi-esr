@@ -23,11 +23,10 @@ import { ESRRuntime } from "./runtime/runtime";
 import { ESRRuntimeStateStore } from "./runtime/state";
 import type { MemoryStore } from "./memory/store";
 
-/** Lazily initialised memory store — only loaded on first use. */
-function getMemoryStore(): MemoryStore | null {
+/** Lazily initialised memory store — only loaded on first use via dynamic import. */
+async function getMemoryStore(): Promise<MemoryStore | null> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MemoryStore: Store } = require("./memory/store");
+    const { MemoryStore: Store } = await import("./memory/store");
     return new Store();
   } catch {
     return null; // better-sqlite3 not installed — memory tools disabled
@@ -36,8 +35,8 @@ function getMemoryStore(): MemoryStore | null {
 
 let memoryStore: MemoryStore | null | undefined;
 
-function ensureMemory(): MemoryStore | null {
-  if (memoryStore === undefined) memoryStore = getMemoryStore();
+async function ensureMemory(): Promise<MemoryStore | null> {
+  if (memoryStore === undefined) memoryStore = await getMemoryStore();
   return memoryStore;
 }
 
@@ -67,9 +66,9 @@ export default function (pi: ExtensionAPI) {
     let fullPrompt = event.systemPrompt + corePrompt;
 
     // Inject entity memory block if the memory layer is available
-    const mem = ensureMemory();
+    const mem = await ensureMemory();
     if (mem) {
-      const { buildMemoryPromptContext } = require("./memory/tools");
+      const { buildMemoryPromptContext } = await import("./memory/tools");
       fullPrompt += buildMemoryPromptContext(graph, mem);
     }
 
@@ -79,10 +78,35 @@ export default function (pi: ExtensionAPI) {
   registerTools(pi, graph, runtimeStore, toolDriverRegistry, runtime);
   registerCommands(pi, graph, runtime, runtimeStore);
 
-  // Register memory tools if better-sqlite3 is available
-  const mem = ensureMemory();
-  if (mem) {
-    const { registerMemoryTools } = require("./memory/tools");
-    registerMemoryTools(pi, mem);
-  }
+  // Auto-journal: wire state change hook so every entity state transition
+  // is recorded in the journal and as a memory observation — no manual
+  // esr_mem_journal calls needed for standard state changes.
+  void (async () => {
+    const mem = await ensureMemory();
+    if (mem) {
+      graph.setStateChangeHook((entityId, oldState, newState, label) => {
+        const transition = `${oldState} → ${newState}`;
+        mem.journal(entityId, transition);
+        const desc = label ? ` ${label}` : "";
+        mem.store(entityId, `${transition}${desc}`, {
+          tags: ["state-transition", `from:${oldState}`, `to:${newState}`],
+        });
+        // When a task reaches stable, also store a completion observation
+        if (newState === "stable") {
+          const entity = graph.getEntity(entityId);
+          if (entity?.role === "Task") {
+            const metrics = Object.entries(entity.metrics)
+              .map(([k, v]) => `${k}=${v}`)
+              .join(", ");
+            mem.store(entityId, `Task completed: ${entity.label ?? entityId}${metrics ? ` (${metrics})` : ""}`, {
+              tags: ["task-completed", "stable"],
+            });
+          }
+        }
+      });
+
+      const { registerMemoryTools } = await import("./memory/tools");
+      registerMemoryTools(pi, mem);
+    }
+  })();
 }
