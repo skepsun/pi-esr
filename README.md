@@ -103,54 +103,58 @@ ESR includes a DAG-based execution engine for orchestrating multi-step tool work
 ## Architecture
 
 ```
+packages/
+└── core/                     @pi-esr/core — framework-agnostic engine
+    └── src/
+        ├── types.ts              Type definitions
+        ├── validation.ts         Ontology validators + state transition matrix
+        ├── graph.ts              ESRGraph class (core state machine)
+        ├── context.ts            ESR context builder + fingerprint
+        ├── runtime.ts            ESRRuntime — tick loop + runUntilIdle
+        ├── state.ts              ESRRuntimeStateStore — node store + events
+        ├── planner.ts            DAG dependency planner
+        ├── executor.ts           Node execution with cache layer
+        ├── scheduler.ts          Simple priority scheduler
+        ├── cache.ts              InMemoryCacheStore + SHA256 cache keys
+        ├── runtime-types.ts      ExecutionNode, RuntimeEvent, etc.
+        ├── driver.ts             ToolDriverRegistry
+        ├── store.ts              MemoryStore — SQLite-backed observation storage
+        ├── recall.ts             Entity-anchored memory context builder
+        ├── journal.ts            State transition journal + summaries
+        ├── session.ts            Shared session state
+        ├── host.ts               Host interface
+        └── index.ts              Package entry point
 extensions/
-├── core/
-│   ├── types.ts              Type definitions
-│   ├── validation.ts         Ontology validators + state transition matrix
-│   ├── graph.ts              ESRGraph class (core state machine)
-│   └── context.ts            Context builder + fingerprint
 ├── integration/
 │   ├── tools.ts              12 ESR tool registrations + runtime tool drivers
-│   └── commands.ts           /esr /esr-clear /esr-step /esr-run
+│   └── commands.ts           /esr /esr-clear /esr-step /esr-run /esr-mem
 ├── persistence/
-│   ├── snapshot.ts           Graph state persistence
+│   ├── graph-persist.ts      Unified persistence (session + file)
+│   ├── snapshot.ts           Graph state persistence adapter
 │   ├── reconstruct.ts        Graph state reconstruction
 │   ├── runtime-state.ts      Runtime state persistence
 │   └── runtime-cache.ts      Runtime cache persistence
-├── runtime/
-│   ├── runtime.ts            ESRRuntime — tick loop + runUntilIdle
-│   ├── state.ts              ESRRuntimeStateStore — node store + events
-│   ├── planner.ts            DAG dependency planner
-│   ├── executor.ts           Node execution with cache layer
-│   ├── scheduler.ts          Simple priority scheduler
-│   ├── cache.ts              InMemoryCacheStore + SHA256 cache keys
-│   ├── runtime-types.ts      ExecutionNode, RuntimeEvent, etc.
-│   └── drivers/
-│       └── tool-driver.ts    ToolDriverRegistry
 ├── memory/
-│   ├── store.ts              MemoryStore — SQLite-backed observation storage
-│   ├── recall.ts             Entity-anchored memory context builder
-│   ├── journal.ts            State transition journal + summaries
 │   └── tools.ts              4 esr_mem_* tool registrations
 ├── prompt.ts                 Prompt context builder
-├── session.ts               Shared session state for memory tag injection
-└── index.ts                  Entry point (thin orchestration)
+└── index.ts                  Extension entry point
 tests/
-├── graph.test.ts             46 tests (entity CRUD, state transitions, cycles, serialization, artifact proxy)
-├── cache.test.ts             4 tests (cache key stability, artifact version impact)
-├── planner.test.ts           4 tests (ready/waiting/blocked node classification)
-├── runtime.test.ts           7 tests (execute, cache hit, invalidation cascade)
-├── tools.test.ts             24 tests (all 11 tool drivers, scheduler, contexts, reconstruct validation)
-├── memory.test.ts            26 tests (store CRUD, recall, journal, context builder, session tags)
-├── session.test.ts           3 tests (session ID get/set/reset)
-└── validate-efficiency.test.ts 15 token/cost/DAG benchmarks
+├── graph.test.ts             46 tests
+├── cache.test.ts             4 tests
+├── planner.test.ts           4 tests
+├── runtime.test.ts           7 tests
+├── tools.test.ts             24 tests
+├── memory.test.ts            26 tests
+├── session.test.ts           3 tests
+└── validate-efficiency.test.ts 15 tests
+```
 
 ## Validation
 
-### Correctness (129 tests, 8 test files)
+### Correctness (233 tests, 15 test files)
 
 ```bash
-npm test                    # 129 tests, <1s
+npm test                    # 233 tests, <1s
 npm run typecheck           # tsc --noEmit, zero errors
 ```
 

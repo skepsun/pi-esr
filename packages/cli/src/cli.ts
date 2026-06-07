@@ -11,7 +11,7 @@
  *   pi-esr status             Show configuration status
  */
 
-import { setupAll, setupOne } from "./setup.js";
+import { setupAll, setupOne, statusAll } from "./setup.js";
 
 const cmd = process.argv[2] ?? "setup";
 
@@ -30,7 +30,7 @@ if (cmd === "setup") {
 } else if (cmd === "status") {
   console.log("pi-esr v0.3.0");
   console.log("");
-  const results = setupAll();
+  const results = statusAll();
   for (const r of results) {
     const icon = r.status === "configured" ? "✅" : r.status === "already" ? "✓" : "✗";
     console.log(`  ${icon} ${r.agent}: ${r.message}`);

@@ -1,9 +1,5 @@
 /**
- * pi-esr: Pi Tool Registrations
- *
- * Registers 14 ESR tools (12 graph/runtime + 4 memory separately)
- * with Pi's tool system (TypeBox schemas, TUI renderers).
- * Runtime handler logic delegates to @pi-esr/core.
+ * pi-esr: Pi Tool Registrations — 12 graph/runtime tools
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";

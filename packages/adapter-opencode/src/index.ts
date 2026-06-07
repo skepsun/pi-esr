@@ -60,7 +60,7 @@ const SNAPSHOT_PATH = () =>
   process.env.ESR_SNAPSHOT_PATH ?? join(process.cwd(), ".esr-snapshot.json");
 
 let _graph: ESRGraph | null = null;
-let _memory: MemoryStore | null = null;
+let _memory: MemoryStore | null | undefined;
 
 /** Get or create the singleton ESR graph, loading from snapshot. */
 export function getGraph(): ESRGraph {

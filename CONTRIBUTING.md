@@ -12,7 +12,7 @@ npm install
 
 | Command | Description |
 |---------|-------------|
-| `npm test` | Run all 129 tests via vitest |
+| `npm test` | Run all 233 tests via vitest |
 | `npm run test:watch` | Watch mode |
 | `npm run typecheck` | TypeScript type checking (`tsc --noEmit`) |
 | `npm run build` | Compile TypeScript to `dist/` |
@@ -30,7 +30,7 @@ See README.md for the full architecture diagram and component descriptions.
 
 ## Adding a New ESR Tool
 
-1. Add the core logic to `extensions/core/graph.ts`
+1. Add the core logic to `packages/core/src/graph.ts`
 2. Register a runtime driver handler in `extensions/integration/tools.ts` (inside `registerRuntimeHandlers`)
 3. Register the tool definition in `extensions/integration/tools.ts` (inside `registerTools`)
 4. Add tests in `tests/tools.test.ts`

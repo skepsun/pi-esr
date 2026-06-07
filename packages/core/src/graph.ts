@@ -170,7 +170,7 @@ export class ESRGraph {
   }
 
   /** Upsert an artifact. Auto-increments version when omitted.
-   *  Also creates a Concept entity proxy (id = artifact id) so relations
+   *  Also auto-creates an Artifact entity proxy (id = artifact id) so relations
    *  like `produces` can target artifacts without workarounds. */
   upsertArtifact(artifact: ESRArtifact): { ok: true } | { ok: false; error: string } {
     if (!validateArtifactType(artifact.type)) return { ok: false, error: `Invalid artifact type: ${artifact.type}` };

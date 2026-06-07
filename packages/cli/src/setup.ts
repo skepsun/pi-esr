@@ -78,6 +78,77 @@ function opencodeMCPConfig(): string {
   }, null, 2);
 }
 
+// ── Status functions (read-only, no side effects) ────────
+
+function statusCursor(): SetupResult {
+  const dir = join(HOME, ".cursor");
+  const file = join(dir, "mcp.json");
+  if (hasFile(file)) {
+    try {
+      const existing = JSON.parse(readFileSync(file, "utf-8"));
+      const servers = existing.mcpServers as Record<string, unknown> | undefined;
+      if (servers?.["pi-esr"]) return { agent: "Cursor", status: "already", message: `Configured in ${file}` };
+    } catch { /* invalid JSON */ }
+  }
+  return { agent: "Cursor", status: "not-found", message: "Not configured" };
+}
+
+function statusClaude(): SetupResult {
+  if (!which("claude")) {
+    return { agent: "Claude Code", status: "not-found", message: "claude CLI not installed" };
+  }
+  try {
+    const list = execSync("claude mcp list 2>/dev/null || true", { encoding: "utf-8" });
+    if (list.includes("pi-esr")) {
+      return { agent: "Claude Code", status: "already", message: "Registered" };
+    }
+    return { agent: "Claude Code", status: "not-found", message: "Not registered" };
+  } catch {
+    return { agent: "Claude Code", status: "error", message: "Could not check status" };
+  }
+}
+
+function statusOpenCode(): SetupResult {
+  const file = join(HOME, ".opencode", "opencode.json");
+  if (hasFile(file)) {
+    try {
+      const existing = JSON.parse(readFileSync(file, "utf-8"));
+      const mcp = existing.mcp as Record<string, unknown> | undefined;
+      if (mcp?.["pi-esr"]) return { agent: "OpenCode", status: "already", message: `Configured in ${file}` };
+    } catch { /* invalid JSON */ }
+  }
+  return { agent: "OpenCode", status: "not-found", message: "Not configured" };
+}
+
+function statusCodex(): SetupResult {
+  if (!which("codex")) {
+    return { agent: "Codex", status: "not-found", message: "codex CLI not installed" };
+  }
+  try {
+    const list = execSync("codex mcp list 2>/dev/null || true", { encoding: "utf-8" });
+    if (list.includes("pi-esr")) {
+      return { agent: "Codex", status: "already", message: "Registered" };
+    }
+    return { agent: "Codex", status: "not-found", message: "Not registered" };
+  } catch {
+    return { agent: "Codex", status: "error", message: "Could not check status" };
+  }
+}
+
+function statusPi(): SetupResult {
+  const pirc = join(process.cwd(), ".pirc.json");
+  if (hasFile(pirc)) {
+    try {
+      const existing = JSON.parse(readFileSync(pirc, "utf-8"));
+      const plugins: string[] = existing.plugins ?? [];
+      if (plugins.includes("pi-esr")) {
+        return { agent: "Pi Agent", status: "already", message: `Configured in ${pirc}` };
+      }
+    } catch { /* invalid JSON */ }
+  }
+  return { agent: "Pi Agent", status: "not-found", message: "Not configured" };
+}
+
 // ── Setup functions ─────────────────────────────────────
 
 function setupCursor(): SetupResult {
@@ -171,6 +242,17 @@ function setupPi(): SetupResult {
 }
 
 // ── Main ────────────────────────────────────────────────
+
+/** Check status only — no side effects, no file writes. */
+export function statusAll(): SetupResult[] {
+  return [
+    statusClaude(),
+    statusCodex(),
+    statusCursor(),
+    statusOpenCode(),
+    statusPi(),
+  ];
+}
 
 export function setupAll(): SetupResult[] {
   return [
