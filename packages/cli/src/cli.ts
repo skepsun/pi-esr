@@ -39,7 +39,6 @@ if (cmd === "setup") {
   console.log(`Usage: pi-esr <command>`);
   console.log(`  setup          Auto-configure all agents`);
   console.log(`  setup --claude Configure Claude Code`);
-  console.log(`  setup --codex   Configure Codex`);
   console.log(`  setup --cursor Configure Cursor`);
   console.log(`  setup --opencode Configure OpenCode`);
   console.log(`  setup --pi     Configure Pi Agent`);
