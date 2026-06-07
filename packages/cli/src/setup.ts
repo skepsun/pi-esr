@@ -120,6 +120,21 @@ function statusOpenCode(): SetupResult {
   return { agent: "OpenCode", status: "not-found", message: "Not configured" };
 }
 
+function statusCodex(): SetupResult {
+  if (!which("codex")) {
+    return { agent: "Codex", status: "not-found", message: "codex CLI not installed" };
+  }
+  try {
+    const list = execSync("codex mcp list 2>/dev/null || true", { encoding: "utf-8" });
+    if (list.includes("pi-esr")) {
+      return { agent: "Codex", status: "already", message: "Registered" };
+    }
+    return { agent: "Codex", status: "not-found", message: "Not registered" };
+  } catch {
+    return { agent: "Codex", status: "error", message: "Could not check status" };
+  }
+}
+
 function statusPi(): SetupResult {
   const pirc = join(process.cwd(), ".pirc.json");
   if (hasFile(pirc)) {
@@ -232,6 +247,7 @@ function setupPi(): SetupResult {
 export function statusAll(): SetupResult[] {
   return [
     statusClaude(),
+    statusCodex(),
     statusCursor(),
     statusOpenCode(),
     statusPi(),
@@ -241,6 +257,7 @@ export function statusAll(): SetupResult[] {
 export function setupAll(): SetupResult[] {
   return [
     setupClaude(),
+    setupCodex(),
     setupCursor(),
     setupOpenCode(),
     setupPi(),
@@ -250,9 +267,28 @@ export function setupAll(): SetupResult[] {
 export function setupOne(agent: string): SetupResult {
   switch (agent.toLowerCase()) {
     case "claude": return setupClaude();
+    case "codex": return setupCodex();
     case "cursor": return setupCursor();
     case "opencode": return setupOpenCode();
     case "pi": return setupPi();
-    default: return { agent, status: "error", message: `Unknown agent: ${agent}. Use: claude, cursor, opencode, pi` };
+    default: return { agent, status: "error", message: `Unknown agent: ${agent}. Use: claude, codex, cursor, opencode, pi` };
+  }
+}
+
+function setupCodex(): SetupResult {
+  if (!which("codex")) {
+    return { agent: "Codex", status: "not-found", message: "codex CLI not found. Install: npm install -g @openai/codex" };
+  }
+
+  try {
+    const list = execSync("codex mcp list 2>/dev/null || true", { encoding: "utf-8" });
+    if (list.includes("pi-esr")) {
+      return { agent: "Codex", status: "already", message: "Already registered" };
+    }
+
+    execSync("codex mcp add pi-esr -- npx @pi-esr/adapter-mcp", { stdio: "inherit" });
+    return { agent: "Codex", status: "configured", message: "Registered via codex mcp add" };
+  } catch (e: any) {
+    return { agent: "Codex", status: "error", message: e.message ?? String(e) };
   }
 }
