@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { ESRGraph } from "../core/graph";
+import { ESRGraph } from "@pi-esr/core";
+import { persistGraphState } from "./graph-persist";
 
 export function persistGraph(pi: ExtensionAPI, graph: ESRGraph): void {
-  pi.appendEntry("esr-state", graph.toPersistedState());
+  persistGraphState(pi, graph);
 }

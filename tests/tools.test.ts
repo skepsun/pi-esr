@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { ESRGraph } from "../extensions/core/graph";
-import { ToolDriverRegistry } from "../extensions/runtime/drivers/tool-driver";
-import { ESRRuntimeStateStore } from "../extensions/runtime/state";
-import { selectNextNode } from "../extensions/runtime/scheduler";
-import { buildRuntimeContext } from "../extensions/runtime/runtime";
+import { ESRGraph } from "@pi-esr/core";
+import { ToolDriverRegistry } from "@pi-esr/core";
+import { ESRRuntimeStateStore } from "@pi-esr/core";
+import { selectNextNode } from "@pi-esr/core";
+import { buildRuntimeContext } from "@pi-esr/core";
 import { reconstructGraph } from "../extensions/persistence/reconstruct";
 import { reconstructRuntimeState } from "../extensions/persistence/runtime-state";
 import { reconstructRuntimeCache } from "../extensions/persistence/runtime-cache";
-import { InMemoryCacheStore as CacheStore } from "../extensions/runtime/cache";
+import { InMemoryCacheStore as CacheStore } from "@pi-esr/core";
 
 function makeEntity(graph: ESRGraph, id: string, overrides: Record<string, unknown> = {}) {
   return graph.createEntity({
@@ -386,15 +386,16 @@ describe("buildRuntimeContext", () => {
 // ═══════════════════════════════════════════════════════════
 
 describe("Reconstruct validation", () => {
-  it("reconstructGraph rejects malformed data", () => {
+  it("reconstructGraph rejects malformed data", async () => {
     const graph = new ESRGraph();
-    reconstructGraph({
+    await reconstructGraph({
       sessionManager: {
         getBranch() {
           return [
             { type: "custom", customType: "esr-state", data: { not: "valid" } },
           ];
         },
+        getSessionDir() { return null; },
       },
     } as never, graph);
     // Malformed data is rejected — graph stays empty (reconstruct clears before loading)

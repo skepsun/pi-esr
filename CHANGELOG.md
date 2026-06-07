@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.1] — 2026-06-07
+
+### Added
+- File-based ESR graph persistence: `esr-state.json` at project level (`.pi-esr-memory/`)
+- Cross-session ESR state continuity — new sessions now inherit the latest ESR graph state
+
+### Changed
+- `reconstructGraph()` now falls back to file persistence when session branch has no ESR entries
+- `persistGraph()` now writes both to session branch and to project-level file
+- `/esr-clear` command now also clears the project-level state file
+
 ## [0.2.0] — 2026-06-07
 
 ### Added
@@ -11,10 +22,13 @@
 - Token compression, prefix-cache stability, cost projection validation
 
 ### Changed
-- README updated to reflect 124 tests, 16 tools, memory module architecture
+- Memory DB default: project-level `$CWD/.pi-esr-memory/` (was user-level `~/.pi-esr-memory`)
+  Set `PI_ESR_MEMORY_DIR` to restore the old user-global behaviour
+- Session ID automatically injected as `session:<id>` tag on every observation
+- README updated to reflect 129 tests, 16 tools, 3-layer scoping model
 
 ### Fixed
-- Test count discrepancy in README (85 → 124)
+- Test count discrepancy in README (85 → 129)
 
 ## [0.1.0] — 2026-05-31
 

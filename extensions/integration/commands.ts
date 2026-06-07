@@ -1,15 +1,20 @@
 /**
- * pi-esr: Command Registrations
+ * pi-esr: Pi Command Registrations
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
-import { buildESRContext } from "../core/context";
-import { ESRGraph } from "../core/graph";
+import { ESRGraph, ESRRuntime, ESRRuntimeStateStore, buildESRContext } from "@pi-esr/core";
+import type { MemoryStore } from "@pi-esr/core";
 import { persistGraph } from "../persistence/snapshot";
 import { persistRuntimeState } from "../persistence/runtime-state";
-import { ESRRuntime } from "../runtime/runtime";
-import { ESRRuntimeStateStore } from "../runtime/state";
+import { clearGraphState } from "../persistence/graph-persist";
+
+let _memoryStore: MemoryStore | null = null;
+
+export function setMemoryStoreForCommands(store: MemoryStore | null): void {
+  _memoryStore = store;
+}
 
 function buildRuntimeSummary(runtimeStore: ESRRuntimeStateStore): string[] {
   const nodes = runtimeStore.getNodes().sort((a, b) => a.node_id.localeCompare(b.node_id));
@@ -76,6 +81,7 @@ export function registerCommands(pi: ExtensionAPI, graph: ESRGraph, runtime: ESR
         runtimeStore.clear();
         persistGraph(pi, graph);
         persistRuntimeState(pi, runtimeStore);
+        clearGraphState(pi);
         ctx.ui.notify("ESR graph cleared", "info");
       }
     },
@@ -97,6 +103,71 @@ export function registerCommands(pi: ExtensionAPI, graph: ESRGraph, runtime: ESR
       const results = await runtime.runUntilIdle(maxSteps);
       const last = results[results.length - 1];
       ctx.ui.notify(`ESR runtime run: steps=${results.length} last=${last?.status ?? "idle"}`, "info");
+    },
+  });
+
+  // ── Memory commands ──────────────────────────────────
+
+  pi.registerCommand("esr-mem", {
+    description: "Show ESR memory: observations, journal, or search",
+    handler: async (args, ctx) => {
+      const mem = _memoryStore;
+      if (!mem) {
+        ctx.ui.notify("Memory store not available (better-sqlite3 not installed)", "error");
+        return;
+      }
+
+      const query = args.trim();
+      let lines: string[] = [];
+
+      if (query) {
+        // Search
+        const results = mem.search(query, 30);
+        lines.push(`Search: "${query}" — ${results.length} results`);
+        lines.push("");
+        for (const obs of results) {
+          const tags = obs.tags?.length ? ` [${obs.tags.join(", ")}]` : "";
+          lines.push(`  ▸ ${obs.entity_id}${tags}`);
+          lines.push(`    ${obs.content.slice(0, 120)}`);
+          lines.push(`    ${obs.created_at}`);
+          lines.push("");
+        }
+      } else {
+        // Overview
+        const total = mem.count();
+        const journalEntries = mem.getAllJournal(20);
+        lines.push(`ESR Memory — ${total} observations, ${journalEntries.length} recent journal entries`);
+        lines.push("");
+        if (journalEntries.length > 0) {
+          lines.push("Recent state transitions:");
+          for (const j of journalEntries) {
+            lines.push(`  ${j.created_at} | ${j.entity_id}: ${j.transition}`);
+          }
+          lines.push("");
+        }
+        lines.push("Use /esr-mem <query> to search, /esr-mem <entity_id> for entity timeline.");
+      }
+
+      if (ctx.mode === "tui" && ctx.hasUI) {
+        await ctx.ui.custom<void>((_tui, theme, _kb, done) => {
+          const headerText = theme.fg("accent", theme.bold(" ESR Memory "));
+          const headerLine = `${theme.fg("borderMuted", "═══")}${headerText}${theme.fg("borderMuted", "═".repeat(15))}`;
+
+          class MemView {
+            private text = [headerLine, ...lines, "", theme.fg("dim", "Press Escape to close"), ""];
+            invalidate(): void {}
+            handleInput(data: string): void {
+              if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c")) done();
+            }
+            render(width: number): string[] {
+              return this.text.map(line => truncateToWidth(line, width));
+            }
+          }
+          return new MemView();
+        });
+      } else {
+        ctx.ui.notify(lines.join("\n"), "info");
+      }
     },
   });
 }
