@@ -1,19 +1,24 @@
 /**
- * pi-esr: Tool Registrations
+ * pi-esr: Pi Tool Registrations
+ *
+ * Registers 14 ESR tools (12 graph/runtime + 4 memory separately)
+ * with Pi's tool system (TypeBox schemas, TUI renderers).
+ * Runtime handler logic delegates to @pi-esr/core.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { buildESRContext } from "../core/context";
-import { ESRGraph } from "../core/graph";
-import type { ESRPersistedState } from "../core/types";
+import {
+  ESRGraph,
+  ESRRuntime,
+  ESRRuntimeStateStore,
+  ToolDriverRegistry,
+  buildESRContext,
+} from "@pi-esr/core";
+import type { ESRPersistedState, ExecutionNode, ExecutionResult } from "@pi-esr/core";
 import { persistGraph } from "../persistence/snapshot";
-import { ToolDriverRegistry } from "../runtime/drivers/tool-driver";
-import { ESRRuntime } from "../runtime/runtime";
-import type { ExecutionNode, ExecutionResult } from "../runtime/runtime-types";
-import { ESRRuntimeStateStore } from "../runtime/state";
 
 function okText(text: string, details: Record<string, unknown>) {
   return {
@@ -42,8 +47,6 @@ function asMetricRecord(value: unknown): Record<string, number> | undefined {
     if (typeof metricValue === "number") {
       metrics[key] = metricValue;
     } else if (metricValue !== undefined) {
-      // Silently skip non-numeric values (LLM may pass stringified numbers),
-      // but log a warning so operators can spot malformed parameters.
       console.warn(`[pi-esr] Metric "${key}" has non-numeric value (${typeof metricValue}), skipping`);
     }
   }
@@ -56,8 +59,6 @@ function registerRuntimeHandlers(
   toolDrivers: ToolDriverRegistry,
   persistGraphFn: () => void,
 ): void {
-  /** Called after every graph mutation: persists graph state,
-   *  then invalidates dependent runtime nodes. */
   function onGraphMutated(reason: string): void {
     persistGraphFn();
     runtimeStore.invalidateDependentNodes(reason);
@@ -84,17 +85,15 @@ function registerRuntimeHandlers(
   toolDrivers.register("esr_update_state", async (params): Promise<ExecutionResult> => {
     const entityId = typeof params.entity_id === "string" ? params.entity_id : null;
     if (!entityId) return { status: "failed", error: "Invalid update_state params" };
-    const currentState = graph.getEntity(entityId)?.state ?? "draft";
-    const state = typeof params.state === "string" ? params.state : currentState;
     const result = graph.updateEntityState(
       entityId,
-      state as never,
+      (typeof params.state === "string" ? params.state : "draft") as never,
       typeof params.confidence === "number" ? params.confidence : undefined,
       asMetricRecord(params.metrics),
     );
     if (!result.ok) return { status: "failed", error: result.error };
     onGraphMutated("Graph changed after entity update");
-    return { status: "succeeded", outputs: { entity_id: entityId, state } };
+    return { status: "succeeded", outputs: { entity_id: entityId, state: params.state } };
   });
 
   toolDrivers.register("esr_link_relation", async (params): Promise<ExecutionResult> => {
@@ -152,10 +151,7 @@ function registerRuntimeHandlers(
       version: typeof params.version === "number" ? params.version : undefined,
       sections: sections.map(section => {
         const value = asRecord(section) ?? {};
-        return {
-          name: String(value.name ?? ""),
-          state: String(value.state ?? "draft") as never,
-        };
+        return { name: String(value.name ?? ""), state: String(value.state ?? "draft") as never };
       }),
     });
     if (!result.ok) return { status: "failed", error: result.error };
@@ -226,6 +222,8 @@ export function registerTools(
   const persistGraphFn = () => persistGraph(pi, graph);
   registerRuntimeHandlers(graph, runtimeStore, toolDrivers, persistGraphFn);
 
+  // ── esr_create_entity ──────────────────────────────────
+
   pi.registerTool({
     name: "esr_create_entity",
     label: "ESR Create Entity",
@@ -246,6 +244,8 @@ export function registerTools(
       return okText(`Created entity: ${entity.entity_id} [${entity.role}] state=${entity.state} confidence=${entity.confidence.toFixed(2)}`, { action: "create_entity", entity });
     },
   });
+
+  // ── esr_update_state ───────────────────────────────────
 
   pi.registerTool({
     name: "esr_update_state",
@@ -269,6 +269,8 @@ export function registerTools(
     },
   });
 
+  // ── esr_link_relation ──────────────────────────────────
+
   pi.registerTool({
     name: "esr_link_relation",
     label: "ESR Link Relation",
@@ -285,6 +287,8 @@ export function registerTools(
       return okText(`Linked: ${params.from} --[${params.type}]--> ${params.to}`, { action: "link_relation", relation: { from: params.from, to: params.to, type: params.type } });
     },
   });
+
+  // ── esr_evaluate ───────────────────────────────────────
 
   pi.registerTool({
     name: "esr_evaluate",
@@ -304,6 +308,8 @@ export function registerTools(
     },
   });
 
+  // ── esr_score ──────────────────────────────────────────
+
   pi.registerTool({
     name: "esr_score",
     label: "ESR Score",
@@ -321,6 +327,8 @@ export function registerTools(
     },
   });
 
+  // ── esr_promote_task ───────────────────────────────────
+
   pi.registerTool({
     name: "esr_promote_task",
     label: "ESR Promote Task",
@@ -336,6 +344,8 @@ export function registerTools(
       return okText(`Promoted task: ${params.entity_id} -> ${params.new_state}`, { action: "promote_task", entity: graph.getEntity(params.entity_id) });
     },
   });
+
+  // ── esr_update_artifact ────────────────────────────────
 
   pi.registerTool({
     name: "esr_update_artifact",
@@ -359,6 +369,8 @@ export function registerTools(
     },
   });
 
+  // ── esr_apply_constraint ───────────────────────────────
+
   pi.registerTool({
     name: "esr_apply_constraint",
     label: "ESR Apply Constraint",
@@ -374,6 +386,8 @@ export function registerTools(
       return okText(`Applied constraint to ${params.entity_id}: ${params.constraint_description}`, { action: "apply_constraint", description: params.constraint_description });
     },
   });
+
+  // ── esr_get_context ────────────────────────────────────
 
   pi.registerTool({
     name: "esr_get_context",
@@ -394,6 +408,8 @@ export function registerTools(
     },
   });
 
+  // ── esr_remove_entity ──────────────────────────────────
+
   pi.registerTool({
     name: "esr_remove_entity",
     label: "ESR Remove Entity",
@@ -408,6 +424,8 @@ export function registerTools(
       return okText(`Removed entity: ${params.entity_id} (relations cascade-deleted)`, { action: "remove_entity", entity_id: params.entity_id });
     },
   });
+
+  // ── esr_remove_relation ────────────────────────────────
 
   pi.registerTool({
     name: "esr_remove_relation",
@@ -425,6 +443,8 @@ export function registerTools(
       return okText(`Removed relation: ${params.from} --[${params.type}]--> ${params.to}`, { action: "remove_relation", relation: { from: params.from, to: params.to, type: params.type } });
     },
   });
+
+  // ── esr_create_node ────────────────────────────────────
 
   pi.registerTool({
     name: "esr_create_node",
@@ -460,6 +480,8 @@ export function registerTools(
     },
   });
 
+  // ── esr_run ────────────────────────────────────────────
+
   pi.registerTool({
     name: "esr_run",
     label: "ESR Run",
@@ -482,7 +504,6 @@ export function registerTools(
     renderResult(result, _options, theme) {
       const first = result.content?.[0];
       const raw = first?.type === "text" ? first.text : "";
-      // Style succeeded count with accent, failed count with dim (dim = gray in most themes)
       const styledText = raw
         .replace(/(\d+) succeeded/, (_, n: string) => `${theme.bold(n)} ${theme.fg("dim", "succeeded")}`)
         .replace(/(\d+) failed/, (_, n: string) => `${theme.fg("dim", n)} ${theme.fg("dim", "failed")}`)

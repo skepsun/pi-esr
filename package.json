@@ -1,6 +1,6 @@
 {
   "name": "pi-esr",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "ESR (Engineering State Runtime) - constrained semantic graph state machine plugin for Pi agent",
   "keywords": [
     "pi-package",
@@ -10,8 +10,13 @@
     "semantic-graph"
   ],
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run tests/",
+    "test:core": "vitest run packages/core/tests/",
+    "test:all": "vitest run tests/ packages/core/tests/",
     "test:watch": "vitest",
     "build": "tsc",
     "typecheck": "tsc --noEmit"
@@ -19,9 +24,6 @@
   "pi": {
     "extensions": [
       "./extensions"
-    ],
-    "prompts": [
-      "./prompts"
     ]
   },
   "peerDependencies": {
@@ -31,9 +33,13 @@
     "typebox": "*"
   },
   "devDependencies": {
-    "better-sqlite3": "^11.0.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@opencode-ai/sdk": "^1.16.2",
     "@types/better-sqlite3": "^7.6.0",
+    "better-sqlite3": "^11.0.0",
+    "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "zod": "^4.4.3"
   }
 }

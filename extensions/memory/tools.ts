@@ -1,18 +1,22 @@
 /**
- * pi-esr: Memory tool registrations
+ * pi-esr: Memory tool registrations for Pi adapter
  *
- * 4 tools: esr_mem_store, esr_mem_recall, esr_mem_timeline, esr_mem_journal
- * Auto-injects entity memory context into system prompt via before_agent_start.
+ * Imports core engine and types from @pi-esr/core,
+ * registers 4 memory tools with Pi's TypeBox tool system.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
-import { ESRGraph } from "../core/graph";
-import { formatObservation } from "./recall";
-import { buildJournalSummary, recordStateChange } from "./journal";
-import { buildActiveMemoryContext } from "./recall";
-import { MemoryStore } from "./store";
+import {
+  ESRGraph,
+  MemoryStore,
+  getCurrentSessionId,
+  formatObservation,
+  buildJournalSummary,
+  buildActiveMemoryContext,
+} from "@pi-esr/core";
+import { recordStateChange } from "@pi-esr/core";
 
 function okText(text: string, details: Record<string, unknown>) {
   return {
@@ -28,10 +32,6 @@ function errorText(error: string) {
   };
 }
 
-/**
- * Build the memory context block for injection into the system prompt.
- * Reads entity IDs directly from the ESR graph — no text parsing needed.
- */
 export function buildMemoryPromptContext(graph: ESRGraph, store: MemoryStore): string {
   const entityIds = graph.getAllEntities().map(e => e.entity_id);
   if (entityIds.length === 0) return "";
@@ -55,9 +55,12 @@ export function registerMemoryTools(pi: ExtensionAPI, store: MemoryStore): void 
       if (typeof params.entity_id !== "string" || typeof params.content !== "string") {
         return errorText("entity_id and content are required");
       }
-      const id = store.store(params.entity_id, params.content, {
-        tags: Array.isArray(params.tags) ? params.tags : undefined,
-      });
+      const userTags = Array.isArray(params.tags) ? params.tags : undefined;
+      const sessionId = getCurrentSessionId();
+      const allTags = sessionId
+        ? [...(userTags ?? []), `session:${sessionId}`]
+        : userTags;
+      const id = store.store(params.entity_id, params.content, { tags: allTags });
       return okText(`Stored memory #${id} anchored to ${params.entity_id}`, {
         action: "esr_mem_store",
         id,
@@ -83,7 +86,6 @@ export function registerMemoryTools(pi: ExtensionAPI, store: MemoryStore): void 
 
       let results;
       if (params.entity_id && params.query) {
-        // Both: search then filter by entity
         const searched = store.search(String(params.query), limit * 2);
         results = searched.filter(o => o.entity_id === params.entity_id).slice(0, limit);
       } else if (params.entity_id) {
@@ -123,7 +125,6 @@ export function registerMemoryTools(pi: ExtensionAPI, store: MemoryStore): void 
         return okText(`No memories for ${entityId}`, { action: "esr_mem_timeline", entity_id: entityId, count: 0 });
       }
 
-      // Show count + first entry
       const text = [
         `Timeline for ${entityId} (${store.countFor(entityId)} total, showing ${entries.length}):`,
         ...entries.map(o => formatObservation(o)),
@@ -162,7 +163,6 @@ export function registerMemoryTools(pi: ExtensionAPI, store: MemoryStore): void 
         });
       }
 
-      // view
       if (params.entity_id) {
         const summary = buildJournalSummary(store, [String(params.entity_id)]);
         return okText(summary, {
@@ -170,7 +170,6 @@ export function registerMemoryTools(pi: ExtensionAPI, store: MemoryStore): void 
           entity_id: params.entity_id,
         });
       } else {
-        // View all recent journal entries
         const entries = store.getAllJournal(30);
         const text = entries.length === 0
           ? "(no journal entries)"
@@ -181,14 +180,6 @@ export function registerMemoryTools(pi: ExtensionAPI, store: MemoryStore): void 
   });
 }
 
-// ═══════════════════════════════════════════════════════════
-// State transition hook — call this from esr_update_state / esr_promote_task
-// ═══════════════════════════════════════════════════════════
-
-/**
- * Hook to be invoked after every entity state change.
- * Automatically records the transition in the journal + as an observation.
- */
 export function onStateChange(store: MemoryStore, entityId: string, oldState: string, newState: string, label?: string, fingerprint?: string): void {
   recordStateChange(store, {
     entity_id: entityId,

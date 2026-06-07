@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ESRGraph } from "../extensions/core/graph";
-import { buildNodeCacheKey, InMemoryCacheStore } from "../extensions/runtime/cache";
+import { ESRGraph } from "@pi-esr/core";
+import { buildNodeCacheKey, InMemoryCacheStore } from "@pi-esr/core";
 import { reconstructRuntimeState } from "../extensions/persistence/runtime-state";
-import { ToolDriverRegistry } from "../extensions/runtime/drivers/tool-driver";
-import { ESRRuntime } from "../extensions/runtime/runtime";
-import { ESRRuntimeStateStore } from "../extensions/runtime/state";
+import { ToolDriverRegistry } from "@pi-esr/core";
+import { ESRRuntime } from "@pi-esr/core";
+import { ESRRuntimeStateStore } from "@pi-esr/core";
 
 function createNode(nodeId: string, toolName: string, params: Record<string, unknown>) {
   return {

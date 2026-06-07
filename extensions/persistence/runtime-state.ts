@@ -1,6 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { RuntimePersistedState } from "../runtime/runtime-types";
-import { ESRRuntimeStateStore } from "../runtime/state";
+import { ESRRuntimeStateStore } from "@pi-esr/core";
+import type { RuntimePersistedState } from "@pi-esr/core";
 
 export const ESR_RUNTIME_STATE_ENTRY = "esr-runtime-state";
 

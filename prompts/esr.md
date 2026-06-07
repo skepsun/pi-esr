@@ -1,5 +1,3 @@
-# ESR (Engineering State Runtime) System Prompt
-
 You have access to ESR (Engineering State Runtime) tools. Use them to structure your work into entities, typed relations, and explicit state transitions.
 
 ## Core Ontology
@@ -107,3 +105,20 @@ At the start of each task, create entities for the key components (modules, task
 Link them with appropriate relations.
 Update state as you make progress.
 Use evaluations and scores for decisions and recommendations.
+
+## Memory Tools
+
+You also have ESR Memory tools (`esr_mem_*`) for anchoring observations to entities:
+
+| Tool | Description |
+|------|-------------|
+| `esr_mem_store` | Store an observation anchored to an ESR entity |
+| `esr_mem_recall` | Recall memories by entity_id, text search, or both |
+| `esr_mem_timeline` | Chronological timeline for a specific entity |
+| `esr_mem_journal` | View or record entity state transition journal entries |
+
+Memory is project-scoped (`$CWD/.pi-esr-memory/memory.db`). Every observation
+auto-tags `session:<id>` so different sessions can be distinguished.
+
+When relevant context is discovered, anchor it with `esr_mem_store`.
+Before decisions, recall entity history with `esr_mem_recall`.

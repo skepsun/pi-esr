@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { InMemoryCacheStore, type RuntimeCachePersistedState } from "../runtime/cache";
+import { InMemoryCacheStore } from "@pi-esr/core";
+import type { RuntimeCachePersistedState } from "@pi-esr/core";
 
 export const ESR_RUNTIME_CACHE_ENTRY = "esr-runtime-cache";
 

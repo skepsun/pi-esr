@@ -1,0 +1,21 @@
+{
+  "name": "@pi-esr/adapter-mcp",
+  "version": "0.3.0",
+  "description": "MCP adapter for pi-esr — run ESR as a Claude Code / Cursor MCP server",
+  "type": "module",
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "bin": {
+    "pi-esr-mcp": "./dist/server.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@pi-esr/core": "0.3.0",
+    "zod": "^3.23.0"
+  },
+  "keywords": ["mcp", "esr", "claude-code", "cursor"]
+}

@@ -1,6 +1,6 @@
 # pi-esr
 
-**Engineering State Runtime** plugin for [Pi Agent](https://github.com/earendil-works/pi).
+**Engineering State Runtime** — one install, all agents.
 
 A constrained semantic graph state machine for engineering, documentation, and decision intelligence tasks. Designed for LLM prefix-cache stability — every byte is deterministic.
 
@@ -9,8 +9,16 @@ A constrained semantic graph state machine for engineering, documentation, and d
 ## Quick Start
 
 ```bash
-pi install ./pi-esr
-npm test                    # 124 tests
+npm install -g pi-esr
+pi-esr setup
+```
+
+That's it. Claude Code, Cursor, OpenCode, and Pi Agent are now configured with 17 ESR tools.
+
+**From source:**
+```bash
+git clone ... && cd pi-esr && npm install
+npm test                    # 233 tests
 npm run typecheck           # Zero errors
 ```
 
@@ -125,33 +133,36 @@ extensions/
 │   ├── journal.ts            State transition journal + summaries
 │   └── tools.ts              4 esr_mem_* tool registrations
 ├── prompt.ts                 Prompt context builder
+├── session.ts               Shared session state for memory tag injection
 └── index.ts                  Entry point (thin orchestration)
 tests/
-├── graph.test.ts             43 tests (entity CRUD, state transitions, cycles, serialization)
+├── graph.test.ts             46 tests (entity CRUD, state transitions, cycles, serialization, artifact proxy)
 ├── cache.test.ts             4 tests (cache key stability, artifact version impact)
 ├── planner.test.ts           4 tests (ready/waiting/blocked node classification)
 ├── runtime.test.ts           7 tests (execute, cache hit, invalidation cascade)
 ├── tools.test.ts             24 tests (all 11 tool drivers, scheduler, contexts, reconstruct validation)
-├── memory.test.ts            24 tests (store CRUD, recall, journal, context builder)
+├── memory.test.ts            26 tests (store CRUD, recall, journal, context builder, session tags)
+├── session.test.ts           3 tests (session ID get/set/reset)
 └── validate-efficiency.test.ts 15 token/cost/DAG benchmarks
 
 ## Validation
 
-### Correctness (124 tests, 7 test files)
+### Correctness (129 tests, 8 test files)
 
 ```bash
-npm test                    # 124 tests, <1s
+npm test                    # 129 tests, <1s
 npm run typecheck           # tsc --noEmit, zero errors
 ```
 
 | Layer | Tests | What's covered |
 |-------|-------|---------------|
-| Graph core | 43 | Entity CRUD, state transitions, cycle detection, serialization roundtrips, fingerprint stability, immutability, context builder |
+| Graph core | 46 | Entity CRUD, state transitions, cycle detection, serialization roundtrips, fingerprint stability, immutability, context builder, artifact auto-proxy |
 | Tool drivers | 24 | All 11 driver operations + scheduler + runtime context + malformed data rejection in reconstruct |
 | Runtime | 7 | Tick execution, cache hit, invalidation cascade, persisted state roundtrips, reconstruct |
 | Cache | 4 | SHA256 key determinism, input-change detection, artifact version impact, persistence roundtrip |
 | Planner | 4 | Dependency-satisfied/none/pending, blocked-by-failure classification |
-| Memory | 24 | Store CRUD, recall/search/timeline, journal, context builder, format helpers, entity ID extraction |
+| Memory | 26 | Store CRUD, recall/search/timeline, journal, context builder, format helpers, entity ID extraction, session tag filtering |
+| Session | 3 | Current session ID get/set/reset |
 | Efficiency | 15 | Token compression benchmarks, prefix-cache stability, context growth rate, cost projection, DAG parallelism |
 
 ### Efficiency Benchmarks

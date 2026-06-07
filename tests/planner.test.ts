@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { computeRunnableNodes } from "../extensions/runtime/planner";
-import { ESRRuntimeStateStore } from "../extensions/runtime/state";
+import { computeRunnableNodes } from "@pi-esr/core";
+import { ESRRuntimeStateStore } from "@pi-esr/core";
 
 function createNode(nodeId: string, state: "pending" | "succeeded" | "failed" | "blocked" = "pending", dependencies: string[] = []) {
   return {

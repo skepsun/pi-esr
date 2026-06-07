@@ -1,7 +1,7 @@
 import { describe, expect, it, afterAll } from "vitest";
-import { MemoryStore, type Observation } from "../extensions/memory/store";
-import { buildMemoryContext, buildActiveMemoryContext, formatObservation } from "../extensions/memory/recall";
-import { recordStateChange, buildJournalSummary } from "../extensions/memory/journal";
+import { MemoryStore, type Observation } from "@pi-esr/core";
+import { buildMemoryContext, buildActiveMemoryContext, formatObservation } from "@pi-esr/core";
+import { recordStateChange, buildJournalSummary } from "@pi-esr/core";
 
 function extractEntityIds(systemPrompt: string): string[] {
   const ids = new Set<string>();
@@ -30,7 +30,7 @@ function extractEntityIds(systemPrompt: string): string[] {
 // ═══════════════════════════════════════════════════════════
 
 describe("MemoryStore", () => {
-  const store = new MemoryStore();
+  const store = new MemoryStore(":memory:");
 
   afterAll(() => {
     store.clear();
@@ -104,6 +104,25 @@ describe("MemoryStore", () => {
     expect(grouped.has("task-db")).toBe(true);
     expect(grouped.get("task-auth")!.length).toBeGreaterThan(0);
   });
+
+  it("stores session tag for cross-session filtering", () => {
+    store.store("task-session", "Session-scoped observation", {
+      tags: ["important", "session:sess-123"],
+    });
+    const obs = store.recall("task-session", 1);
+    expect(obs[0].tags).toContain("session:sess-123");
+  });
+
+  it("search can filter by session tag via LIKE", () => {
+    store.store("task-filter-1", "Only in session A", { tags: ["session:sess-A"] });
+    store.store("task-filter-2", "Only in session B", { tags: ["session:sess-B"] });
+
+    const resultsA = store.search("session:sess-A");
+    expect(resultsA.every(o => o.tags.includes("session:sess-A"))).toBe(true);
+
+    const resultsB = store.search("session:sess-B");
+    expect(resultsB.every(o => o.tags.includes("session:sess-B"))).toBe(true);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -111,7 +130,7 @@ describe("MemoryStore", () => {
 // ═══════════════════════════════════════════════════════════
 
 describe("Journal", () => {
-  const store = new MemoryStore();
+  const store = new MemoryStore(":memory:");
 
   afterAll(() => {
     store.clear();
@@ -164,7 +183,7 @@ describe("Journal", () => {
 // ═══════════════════════════════════════════════════════════
 
 describe("Context Builder", () => {
-  const store = new MemoryStore();
+  const store = new MemoryStore(":memory:");
 
   afterAll(() => {
     store.clear();
@@ -212,7 +231,7 @@ describe("Context Builder", () => {
 // ═══════════════════════════════════════════════════════════
 
 describe("Journal Summary", () => {
-  const store = new MemoryStore();
+  const store = new MemoryStore(":memory:");
 
   afterAll(() => {
     store.clear();

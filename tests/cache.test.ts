@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ESRGraph } from "../extensions/core/graph";
-import { buildNodeCacheKey, InMemoryCacheStore } from "../extensions/runtime/cache";
-import { ESRRuntimeStateStore } from "../extensions/runtime/state";
+import { ESRGraph } from "@pi-esr/core";
+import { buildNodeCacheKey, InMemoryCacheStore } from "@pi-esr/core";
+import { ESRRuntimeStateStore } from "@pi-esr/core";
 
 function createNode(nodeId: string, params: Record<string, unknown>) {
   return {

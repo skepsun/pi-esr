@@ -5,8 +5,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { buildESRContext, buildGraphFingerprint } from "../extensions/core/context";
-import { ESRGraph } from "../extensions/core/graph";
+import { buildESRContext, buildGraphFingerprint } from "@pi-esr/core";
+import { ESRGraph } from "@pi-esr/core";
 
 function makeEntity(id: string, overrides: Record<string, unknown> = {}) {
   return {

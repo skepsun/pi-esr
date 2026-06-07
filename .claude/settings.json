@@ -1,0 +1,14 @@
+{
+  "commands": [
+    {
+      "name": "esr",
+      "description": "Show current ESR graph state",
+      "prompt": "Call esr_get_context and present the entities, relations, and tasks in a readable summary."
+    },
+    {
+      "name": "esr-clear",
+      "description": "Clear all ESR state",
+      "prompt": "Call esr_remove_entity for every entity in the ESR graph. Ask for confirmation first."
+    }
+  ]
+}
