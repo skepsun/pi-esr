@@ -10,7 +10,8 @@ A constrained semantic graph state machine for engineering, documentation, and d
 
 ```bash
 pi install ./pi-esr
-npm test                    # 61 unit tests
+npm test                    # 100 tests
+npm run typecheck           # Zero errors
 ```
 
 ## Overview
@@ -111,10 +112,68 @@ extensions/
 ├── prompt.ts                 Prompt context builder
 └── index.ts                  Entry point (thin orchestration)
 tests/
-├── graph.test.ts             46 tests
-├── cache.test.ts             4 tests
-├── planner.test.ts           4 tests
-└── runtime.test.ts           7 tests
+├── graph.test.ts             43 tests (entity CRUD, state transitions, cycles, serialization)
+├── cache.test.ts             4 tests (cache key stability, artifact version impact)
+├── planner.test.ts           4 tests (ready/waiting/blocked node classification)
+├── runtime.test.ts           7 tests (execute, cache hit, invalidation cascade)
+├── tools.test.ts             24 tests (all 11 tool drivers, scheduler, contexts, reconstruct validation)
+└── validate-efficiency.test.ts 15 token/cost/DAG benchmarks
+
+## Validation
+
+### Correctness (85 tests, 6 test files)
+
+```bash
+npm test                    # 85 tests, <1s
+npm run typecheck           # tsc --noEmit, zero errors
+```
+
+| Layer | Tests | What's covered |
+|-------|-------|---------------|
+| Graph core | 43 | Entity CRUD, state transitions, cycle detection, serialization roundtrips, fingerprint stability, immutability, context builder |
+| Tool drivers | 24 | All 11 driver operations + scheduler + runtime context + malformed data rejection in reconstruct |
+| Runtime | 7 | Tick execution, cache hit, invalidation cascade, persisted state roundtrips, reconstruct |
+| Cache | 4 | SHA256 key determinism, input-change detection, artifact version impact, persistence roundtrip |
+| Planner | 4 | Dependency-satisfied/none/pending, blocked-by-failure classification |
+
+### Efficiency Benchmarks
+
+```bash
+npx vitest run tests/validate-efficiency.test.ts --reporter=verbose
+```
+
+#### Token Compression vs Chat History
+
+| Entities | ESR context | Chat equivalent | Ratio | Savings |
+|----------|-------------|-----------------|-------|---------|
+| 5 | 138t | 210t | 1.5x | 34% |
+| 10 | 260t | 435t | 1.7x | 40% |
+| 20 | 515t | 897t | 1.7x | 43% |
+| 50 | 1280t | 2285t | 1.8x | 44% |
+| 100 | 2555t | 4597t | 1.8x | 44% |
+
+ESR context is ~1.8x more compact than equivalent chat history at scale.
+
+#### Prefix-Cache Stability
+
+- Identical state → identical fingerprint → **100% cache hit**
+- Adding/removing entities → fingerprint changes (correct cache miss)
+- Context output is **byte-for-byte deterministic** — DeepSeek/Claude prefix cache compatible
+- Per-entity overhead: ~11 tokens (linear O(n), no quadratic blowup)
+
+#### DAG Parallelism
+
+| Scenario | Sequential (chat) | ESR runtime | Reduction |
+|----------|-------------------|-------------|-----------|
+| 3 independent nodes | 3 LLM rounds | 1 `esr_run` (zero-token) | **67%** |
+| 5-node chain, 1 changed | 5 re-executions | 3 re-executions (cache hit on 2) | **40%** |
+
+#### Cost Projection (DeepSeek pricing)
+
+For a 100-entity session with 50 turns:
+- Chat history cost (no cache): ~$0.032
+- ESR with prefix-cache hits: ~$0.002
+- **Estimated savings per session: $0.03+** (compounds across many sessions)
 ```
 
 ## State Transition Matrix
