@@ -97,6 +97,41 @@ function sortRelations(relations: MinimalRelation[]): MinimalRelation[] {
   );
 }
 
+function buildMethodology(): string {
+  return [
+    "",
+    "ESR Quick Reference",
+    "──────────────────────",
+    "",
+    "Entity roles: Actor, Artifact, Task, Concept, Constraint",
+    "State lifecycle: draft → active → stable (or blocked / deprecated)",
+    "",
+    "Relation types:",
+    "  Structural: depends_on, part_of, implements",
+    "  Semantic:   supports, contradicts, refines",
+    "  Evaluation: evaluates, scores, validates",
+    "  Operational: triggers, updates, blocks, produces",
+    "",
+    "Golden rules:",
+    "  1. Everything meaningful → Entity",
+    "  2. All structure → Relation",
+    "  3. State is the only truth",
+    "  4. If it can\'t be represented in ontology → don\'t store",
+    "",
+    "Closure protocol (every task reaching stable):",
+    "  1. esr_update_artifact — for every file produced or modified",
+    "  2. esr_link_relation task --[produces]--> artifact",
+    "  3. esr_evaluate — with objective metrics",
+    "  4. esr_mem_store — summary: what was done, why, caveats",
+    "  5. Group under Concept + Actor --[evaluates]--> task",
+    "",
+    "State loading:",
+    "  esr_get_context()             → full state + revision",
+    "  esr_get_context(since_revision=N) → unchanged (10 tokens) or full state",
+    "",
+  ].join("\n");
+}
+
 function buildContext(state: MinimalState): string {
   const lines: string[] = ["[ESR_CONTEXT]", ""];
   const sortedEntities = sortEntities(state.entities);
@@ -178,7 +213,7 @@ if (!state) {
   process.exit(0);
 }
 
-const contextText = buildContext(state);
+const contextText = buildMethodology() + "\n" + buildContext(state);
 
 console.log(JSON.stringify({
   hookSpecificOutput: {
