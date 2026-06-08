@@ -1,6 +1,6 @@
 # pi-esr
 
-**Engineering State Runtime** — one install, all agents.
+**Engineering State Runtime** — structured state machine for LLM agents.
 
 A constrained semantic graph state machine for engineering, documentation, and decision intelligence tasks. Designed for LLM prefix-cache stability — every byte is deterministic.
 
@@ -8,30 +8,29 @@ A constrained semantic graph state machine for engineering, documentation, and d
 
 ## Quick Start
 
+Pi Agent (one command):
+
 ```bash
 npm install -g pi-esr
 pi-esr setup
 ```
 
-That's it. Claude Code, Cursor, OpenCode, and Pi Agent are now configured with 17 ESR tools (13 graph/runtime + 4 memory).
+That's it — 17 ESR tools (13 graph/runtime + 4 memory) are now available.
 
-### Using with MCP Clients (Claude Code, Cursor)
+### MCP Clients (Claude Code, Cursor)
 
 ```bash
-# Add as MCP server
 claude mcp add pi-esr -- npx @pi-esr/adapter-mcp
 
-# Then in Claude Code, load the ESR methodology prompt:
-#   /prompts get pi-esr esr-system-prompt
-# This teaches the LLM when and how to use ESR tools.
-#
-# Tip: add the prompt output to your CLAUDE.md or project instructions
-# so it's always available in every session.
+# Then load the ESR methodology so the LLM knows how to use the tools:
+/prompts get pi-esr esr-system-prompt
+# → paste the output into your CLAUDE.md or project instructions
 ```
 
-**From source:**
+### From Source
+
 ```bash
-git clone ... && cd pi-esr && npm install
+git clone https://github.com/skepsun/pi-esr.git && cd pi-esr && npm install
 npm test                    # 132 tests
 npm run typecheck           # Zero errors
 ```

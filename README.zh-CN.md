@@ -1,6 +1,6 @@
 # pi-esr
 
-**工程状态运行时（Engineering State Runtime）** — 一次安装，适配所有智能体。
+**工程状态运行时（Engineering State Runtime）** — 为 LLM 智能体设计的结构化状态机。
 
 一个受约束的语义图状态机，专为工程、文档和决策智能任务设计。为 LLM 前缀缓存稳定性而生 — 每个字节都是确定性的。
 
@@ -8,30 +8,29 @@
 
 ## 快速开始
 
+Pi Agent（一条命令）：
+
 ```bash
 npm install -g pi-esr
 pi-esr setup
 ```
 
-即可完成。Claude Code、Cursor、OpenCode 和 Pi Agent 现已配置 17 个 ESR 工具（13 个图/运行时 + 4 个记忆工具）。
+即可完成 — 17 个 ESR 工具（13 个图/运行时 + 4 个记忆工具）已就绪。
 
-### 在 MCP 客户端中使用（Claude Code、Cursor）
+### MCP 客户端（Claude Code、Cursor）
 
 ```bash
-# 注册为 MCP 服务器
 claude mcp add pi-esr -- npx @pi-esr/adapter-mcp
 
-# 然后在 Claude Code 中加载 ESR 方法论提示词：
-#   /prompts get pi-esr esr-system-prompt
-# 这会教 LLM 何时以及如何使用 ESR 工具。
-#
-# 提示：将 prompt 输出添加到 CLAUDE.md 或项目指令中，
-# 这样每个会话都会自动生效。
+# 然后加载 ESR 方法论提示词，让 LLM 学会使用工具：
+/prompts get pi-esr esr-system-prompt
+# → 将输出内容粘贴到 CLAUDE.md 或项目指令中
 ```
 
-**从源码安装：**
+### 从源码安装
+
 ```bash
-git clone ... && cd pi-esr && npm install
+git clone https://github.com/skepsun/pi-esr.git && cd pi-esr && npm install
 npm test                    # 132 个测试
 npm run typecheck           # 零类型错误
 ```
