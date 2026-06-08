@@ -388,11 +388,14 @@ export function registerTools(
   pi.registerTool({
     name: "esr_get_context",
     label: "ESR Get Context",
-    description: "Query the current ESR graph state.",
+    description: "Query the current ESR graph state. Pass since_revision=N to skip unchanged state (10 tokens vs full).",
     promptSnippet: "Query the current ESR graph state",
-    parameters: Type.Object({}),
-    async execute() {
-      const context = buildESRContext(graph);
+    parameters: Type.Object({
+      since_revision: Type.Optional(Type.Integer({ description: "Skip output if graph version matches this revision" })),
+    }),
+    async execute(_id, params) {
+      const sinceRevision = typeof params.since_revision === "number" ? params.since_revision : undefined;
+      const context = buildESRContext(graph, { sinceRevision });
       return {
         content: [{ type: "text", text: context }],
         details: graph.toPersistedState() satisfies ESRPersistedState,

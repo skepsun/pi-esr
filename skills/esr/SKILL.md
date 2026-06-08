@@ -48,8 +48,15 @@ Tasks are the primary entities you promote through this lifecycle.
 **Every session starts with:**
 
 ```
-1. esr_get_context        — See current graph state (entities, relations, tasks)
+1. esr_get_context        — Load current graph state. Returns full state + revision number.
 2. esr_mem_recall         — Check what happened last session
+```
+
+**Subsequent state checks:**
+
+```
+esr_get_context(since_revision=N)   — Pass the revision from your last call.
+                                       If unchanged: 10 tokens. If changed: full state.
 ```
 
 **When beginning a task:**
@@ -134,16 +141,17 @@ esr_evaluate t1 {pages: 5, sections: 12}         → esr_promote_task t1 stable
 
 **Cross-session recall:**
 ```
-esr_get_context                                    → See what's in flight
+esr_get_context                                    → Load state + get current revision
 esr_mem_recall {query: "login bug"}                → Find past work on similar topics
 esr_mem_timeline t1                                → Audit all state changes on a task
+esr_get_context(since_revision=42)                 → Check if anything changed
 ```
 
 ## Tool Reference
 
 | Tool | When to use |
 |------|------------|
-| `esr_get_context` | Start of every session, before decisions |
+| `esr_get_context` | Start of every session, before decisions, pass `since_revision` for incremental |
 | `esr_create_entity` | New task, artifact, concept, actor, constraint |
 | `esr_update_state` | Change state, confidence, or metrics |
 | `esr_link_relation` | Connect any two entities |

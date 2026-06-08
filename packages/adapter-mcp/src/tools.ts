@@ -404,8 +404,13 @@ export const TOOLS: Record<string, ToolEntry> = {
   },
 
   esr_get_context: {
-    schema: z.object({}),
-    handler: async () => buildESRContext(graph),
+    schema: z.object({
+      since_revision: z.number().int().positive().optional(),
+    }),
+    handler: async (args) => {
+      const sinceRevision = typeof args.since_revision === "number" ? args.since_revision : undefined;
+      return buildESRContext(graph, { sinceRevision });
+    },
   },
 
   esr_remove_entity: {

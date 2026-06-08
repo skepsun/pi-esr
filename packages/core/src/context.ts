@@ -49,8 +49,25 @@ export function buildGraphFingerprint(graph: ESRGraph): string {
  * Build the LLM context injection block from the current graph state.
  * Output is deterministically sorted — entities by id, relations by (from, type, to),
  * artifacts by id. This guarantees prefix-cache stability for LLM providers.
+ *
+ * When `sinceRevision` is provided and matches the current graph version,
+ * returns a minimal "no changes" message to avoid re-transmitting identical
+ * state. When it does not match (or is omitted), returns the full context.
  */
-export function buildESRContext(graph: ESRGraph): string {
+export function buildESRContext(graph: ESRGraph, opts?: { sinceRevision?: number }): string {
+  const currentVersion = graph.getVersion();
+
+  // Incremental: no changes
+  if (opts?.sinceRevision !== undefined && opts.sinceRevision >= currentVersion) {
+    return [
+      "[ESR_CONTEXT]",
+      "",
+      `ESR state unchanged since revision ${opts.sinceRevision}.`,
+      "",
+      `ESR revision: ${currentVersion}`,
+    ].join("\n");
+  }
+
   const lines: string[] = ["[ESR_CONTEXT]", ""];
   const sortedEntities = sortEntities(graph.getAllEntities());
   const sortedRelations = sortRelations(graph.getAllRelations());
@@ -107,6 +124,9 @@ export function buildESRContext(graph: ESRGraph): string {
       lines.push(`  ${c.entity_id} state=${c.state}${c.label ? ` "${c.label}"` : ""}`);
     }
   }
+
+  lines.push("");
+  lines.push(`ESR revision: ${currentVersion}`);
 
   return lines.join("\n");
 }

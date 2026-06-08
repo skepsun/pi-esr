@@ -17,6 +17,7 @@
     "workflow"
   ],
   "skills": "./skills/",
+  "hooks": "./hooks/claude-hooks.json",
   "interface": {
     "displayName": "ESR (Engineering State Runtime)",
     "shortDescription": "Structured entity tracking, state management, and DAG execution for coding agents",

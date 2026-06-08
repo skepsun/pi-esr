@@ -10,8 +10,6 @@ import { fileURLToPath } from "node:url";
 
 const HOME = homedir();
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ESR_BLOCK_START = "<!-- pi-esr:begin -->";
-const ESR_BLOCK_END = "<!-- pi-esr:end -->";
 
 interface SetupResult {
   agent: string;
@@ -53,77 +51,7 @@ function hasFile(path: string): boolean {
   return existsSync(path);
 }
 
-function getPromptContent(): string {
-  const candidates = [
-    join(__dirname, "..", "prompts", "esr.md"),
-    join(__dirname, "..", "..", "..", "prompts", "esr.md"),
-    join(process.cwd(), "prompts", "esr.md"),
-  ];
 
-  for (const file of candidates) {
-    if (!hasFile(file)) continue;
-    try {
-      return readFileSync(file, "utf-8").trim();
-    } catch {
-      // Try next candidate.
-    }
-  }
-
-  return [
-    "You have access to ESR (Engineering State Runtime) tools.",
-    "Use them proactively for meaningful work by creating entities, linking relations, updating state, and calling esr_run after declaring a DAG with esr_create_node.",
-  ].join("\n");
-}
-
-function getInstructionFile(agent: "claude" | "codex", cwd = process.cwd()): string {
-  return join(cwd, agent === "claude" ? "CLAUDE.md" : "AGENTS.md");
-}
-
-function buildInstructionBlock(agent: "claude" | "codex"): string {
-  const prompt = getPromptContent();
-  const heading = agent === "claude" ? "# ESR Instructions" : "## ESR Instructions";
-  return [
-    ESR_BLOCK_START,
-    heading,
-    "",
-    "This section is managed by `pi-esr setup`. Keep it intact so ESR tools remain discoverable and consistently used.",
-    "",
-    prompt,
-    ESR_BLOCK_END,
-  ].join("\n");
-}
-
-function upsertManagedBlock(file: string, block: string): "created" | "updated" | "unchanged" {
-  const existing = hasFile(file) ? readFileSync(file, "utf-8") : "";
-  const pattern = new RegExp(`${ESR_BLOCK_START}[\\s\\S]*?${ESR_BLOCK_END}\\n?`, "g");
-  const hasManagedBlock = pattern.test(existing);
-  const normalized = hasManagedBlock
-    ? existing.replace(pattern, `${block}\n`)
-    : `${existing.trimEnd()}${existing.trimEnd() ? "\n\n" : ""}${block}\n`;
-
-  if (normalized === existing) return "unchanged";
-
-  writeFileSync(file, normalized, "utf-8");
-  return hasManagedBlock ? "updated" : "created";
-}
-
-function removeManagedBlock(file: string): boolean {
-  if (!hasFile(file)) return false;
-  const existing = readFileSync(file, "utf-8");
-  const pattern = new RegExp(`\\n?${ESR_BLOCK_START}[\\s\\S]*?${ESR_BLOCK_END}\\n?`, "g");
-  const next = existing.replace(pattern, "\n").replace(/\n{3,}/g, "\n\n").trimEnd();
-  if (next === existing) return false;
-  writeFileSync(file, `${next}${next ? "\n" : ""}`, "utf-8");
-  return true;
-}
-
-function syncInstructions(agent: "claude" | "codex"): string {
-  const filename = agent === "claude" ? "CLAUDE.md" : "AGENTS.md";
-  const file = getInstructionFile(agent);
-  const result = upsertManagedBlock(file, buildInstructionBlock(agent));
-  if (result === "unchanged") return `${filename} unchanged`;
-  return `${filename} ${result}`;
-}
 
 // ── Config generators ──────────────────────────────────
 
@@ -280,11 +208,10 @@ function setupClaude(deps: SetupDeps = defaultDeps): SetupResult {
     if (!alreadyRegistered) {
       deps.exec("claude mcp add pi-esr -- npx @pi-esr/adapter-mcp", { stdio: "inherit" });
     }
-    const instructionStatus = upsertManagedBlock(getInstructionFile("claude", deps.cwd()), buildInstructionBlock("claude"));
     return {
       agent: "Claude Code",
-      status: alreadyRegistered && instructionStatus === "unchanged" ? "already" : "configured",
-      message: `${alreadyRegistered ? "MCP already registered" : "Registered via claude mcp add"}; CLAUDE.md ${instructionStatus}`,
+      status: alreadyRegistered ? "already" : "configured",
+      message: alreadyRegistered ? "MCP already registered" : "Registered via claude mcp add",
     };
   } catch (e: any) {
     return { agent: "Claude Code", status: "error", message: e.message ?? String(e) };
@@ -354,12 +281,11 @@ function removeCursor(): SetupResult {
 }
 
 function removeClaude(deps: SetupDeps = defaultDeps): SetupResult {
-  const instructionsRemoved = removeManagedBlock(getInstructionFile("claude", deps.cwd()));
   if (!deps.hasCommand("claude")) {
     return {
       agent: "Claude Code",
-      status: instructionsRemoved ? "configured" : "not-found",
-      message: instructionsRemoved ? "CLAUDE.md cleaned" : "claude CLI not installed",
+      status: "not-found",
+      message: "claude CLI not installed",
     };
   }
   try {
@@ -367,7 +293,7 @@ function removeClaude(deps: SetupDeps = defaultDeps): SetupResult {
     return {
       agent: "Claude Code",
       status: "configured",
-      message: `Removed${instructionsRemoved ? "; CLAUDE.md cleaned" : ""}`,
+      message: "Removed",
     };
   } catch (e: any) {
     return { agent: "Claude Code", status: "error", message: e.message ?? String(e) };
@@ -391,12 +317,11 @@ function removeOpenCode(): SetupResult {
 }
 
 function removeCodex(deps: SetupDeps = defaultDeps): SetupResult {
-  const instructionsRemoved = removeManagedBlock(getInstructionFile("codex", deps.cwd()));
   if (!deps.hasCommand("codex")) {
     return {
       agent: "Codex",
-      status: instructionsRemoved ? "configured" : "not-found",
-      message: instructionsRemoved ? "AGENTS.md cleaned" : "codex CLI not installed",
+      status: "not-found",
+      message: "codex CLI not installed",
     };
   }
   try {
@@ -404,7 +329,7 @@ function removeCodex(deps: SetupDeps = defaultDeps): SetupResult {
     return {
       agent: "Codex",
       status: "configured",
-      message: `Removed${instructionsRemoved ? "; AGENTS.md cleaned" : ""}`,
+      message: "Removed",
     };
   } catch (e: any) {
     return { agent: "Codex", status: "error", message: e.message ?? String(e) };
@@ -489,11 +414,10 @@ function setupCodex(deps: SetupDeps = defaultDeps): SetupResult {
     if (!alreadyRegistered) {
       deps.exec("codex mcp add pi-esr -- npx @pi-esr/adapter-mcp", { stdio: "inherit" });
     }
-    const instructionStatus = upsertManagedBlock(getInstructionFile("codex", deps.cwd()), buildInstructionBlock("codex"));
     return {
       agent: "Codex",
-      status: alreadyRegistered && instructionStatus === "unchanged" ? "already" : "configured",
-      message: `${alreadyRegistered ? "MCP already registered" : "Registered via codex mcp add"}; AGENTS.md ${instructionStatus}`,
+      status: alreadyRegistered ? "already" : "configured",
+      message: alreadyRegistered ? "MCP already registered" : "Registered via codex mcp add",
     };
   } catch (e: any) {
     return { agent: "Codex", status: "error", message: e.message ?? String(e) };
@@ -664,13 +588,8 @@ export function pluginStatusAll(): SetupResult[] {
 }
 
 export const __test__ = {
-  buildInstructionBlock,
-  getInstructionFile,
-  getPromptContent,
   removeClaude,
   removeCodex,
-  removeManagedBlock,
   setupClaude,
   setupCodex,
-  upsertManagedBlock,
 };

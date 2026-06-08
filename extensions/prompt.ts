@@ -3,8 +3,6 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ESRGraph } from "@pi-esr/core";
 import type { ESRRuntimeStateStore } from "@pi-esr/core";
-import { buildESRContext } from "@pi-esr/core";
-import { buildRuntimeContext } from "@pi-esr/core";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -20,10 +18,13 @@ function getPromptContent(): string {
   return _promptCache;
 }
 
-export function buildPromptContext(graph: ESRGraph, runtimeStore?: ESRRuntimeStateStore): string {
+/**
+ * Build the STATIC ESR methodology prompt for system-prompt injection.
+ * Contains ontology, golden rules, closure protocol, and tool usage guidance.
+ * Does NOT include dynamic state (entities, relations, tasks) — those are
+ * fetched on-demand via the esr_get_context tool to preserve prompt-cache stability.
+ */
+export function buildStaticPrompt(): string {
   const promptContent = getPromptContent();
-  const esrContext = buildESRContext(graph);
-  const runtimeContext = runtimeStore ? buildRuntimeContext(runtimeStore) : "";
-  const fullContext = runtimeContext ? `${esrContext}\n\n${runtimeContext}` : esrContext;
-  return `\n\n${promptContent}\n\n${fullContext}\n\nYou have access to ESR tools (esr_*). Use the ESR graph above to make structured, ontology-validated state transitions. For any meaningful work, create entities, link relations, and update states via the ESR tools. When you need multi-step execution, declare a DAG with esr_create_node, then call esr_run to execute it.`;
+  return `\n\n${promptContent}\n\nYou have access to ESR tools (esr_*). Use the ESR ontology above to make structured, ontology-validated state transitions. For any meaningful work, create entities, link relations, and update states via the ESR tools. When you need multi-step execution, declare a DAG with esr_create_node, then call esr_run to execute it. Call esr_get_context to load the current graph state — it is NOT pre-injected.`;
 }

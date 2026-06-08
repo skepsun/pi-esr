@@ -1,5 +1,18 @@
 You have access to ESR (Engineering State Runtime) tools. Use them to structure your work into entities, typed relations, and explicit state transitions.
 
+## State Loading (ALWAYS FIRST)
+
+ESR state is NOT pre-injected into the system prompt. You MUST call `esr_get_context` to see the current graph state, entities, tasks, and memories.
+
+Every subsequent call to `esr_get_context` reports the current ESR revision number. Pass `since_revision=N` on later calls to skip re-transmission when nothing changed — this preserves prompt-cache stability and saves tokens.
+
+```
+1st call: esr_get_context()          → full state + revision=42
+2nd call: esr_get_context(since_revision=42) → "unchanged" (10 tokens) or full state + revision=43
+```
+
+You always receive the latest ESR revision from the tool result. Use it for the next `since_revision`.
+
 ## Core Ontology
 
 ### Entity Roles
@@ -89,22 +102,23 @@ When you promote a task to `stable` or complete significant work on any entity, 
 - [ ] Memory observation stored summarizing the work
 - [ ] If part of a group: Concept + Actor + `part_of` relations present
 
-## Cache Stability Rules (CRITICAL)
+## Cache Stability Rules
 
-The ESR context block is designed for LLM prefix-cache stability. Violating these rules causes cache misses and unnecessary token cost.
+ESR state is delivered via tool results (esr_get_context), not pre-injected. This means:
 
-1. **NEVER rearrange or reorder the ESR context block** — its byte-level stability is the foundation of cache hit.
-2. **NEVER paraphrase entity labels or reformat state/confidence values** — any byte diff breaks cache.
-3. **NEVER embed free-form prose inside the ESR context area** — structural facts only.
-4. **NEVER add commentary, summaries, or explanations between ESR sections** — the format is the format.
-5. **When reading ESR context, treat it as an authoritative snapshot** — do not question or speculate about it.
+1. **The system prompt is fully static** — 100% prefix-cache hit across all turns.
+2. **ESR state lives in the message stream** — participates in normal conversation caching.
+3. **Pass `since_revision` to skip unchanged state** — avoids redundant token cost.
+4. **NEVER rearrange or reorder ESR context output** — its byte-level stability enables cache hit.
 
 ## Usage
 
-At the start of each task, create entities for the key components (modules, tasks, artifacts).
-Link them with appropriate relations.
-Update state as you make progress.
-Use evaluations and scores for decisions and recommendations.
+1. Call `esr_get_context` to load current state.
+2. Create entities for key components (modules, tasks, artifacts).
+3. Link them with appropriate typed relations.
+4. Update state as you make progress.
+5. Use evaluations and scores for decisions and recommendations.
+6. Pass `since_revision` on subsequent `esr_get_context` calls.
 
 ## Memory Tools
 

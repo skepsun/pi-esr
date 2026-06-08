@@ -23,7 +23,7 @@ import { persistRuntimeCache } from "./persistence/runtime-cache";
 import { persistRuntimeState } from "./persistence/runtime-state";
 import { reconstructRuntimeState } from "./persistence/runtime-state";
 import { reconstructRuntimeCache } from "./persistence/runtime-cache";
-import { buildPromptContext } from "./prompt";
+import { buildStaticPrompt } from "./prompt";
 
 async function getMemoryStore(): Promise<MemoryStore | null> {
   try {
@@ -69,16 +69,11 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("before_agent_start", async (event, _ctx) => {
-    const corePrompt = buildPromptContext(graph, runtimeStore);
-    let fullPrompt = event.systemPrompt + corePrompt;
-
-    const mem = await getMemoryStore();
-    if (mem) {
-      const { buildMemoryPromptContext } = await import("./memory/tools");
-      fullPrompt += buildMemoryPromptContext(graph, mem);
-    }
-
-    return { systemPrompt: fullPrompt };
+    // Only inject STATIC methodology (ontology, rules, protocol).
+    // Dynamic state (entities, relations, tasks, memories) is fetched
+    // on-demand via esr_get_context to preserve prompt-cache stability.
+    const staticPrompt = buildStaticPrompt();
+    return { systemPrompt: event.systemPrompt + staticPrompt };
   });
 
   // ── Tools & commands ──────────────────────────────────

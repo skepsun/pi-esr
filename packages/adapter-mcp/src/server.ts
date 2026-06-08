@@ -181,7 +181,7 @@ At the start of each task, create entities for the key components (modules, task
 Link them with appropriate relations.
 Update state as you make progress.
 Use evaluations and scores for decisions and recommendations.
-Start by calling esr_get_context to see the current state.`;
+Start by calling esr_get_context to load the current state. Pass since_revision=N on subsequent calls to skip unchanged state.`;
 
 // Register MCP prompt — discoverable by Claude Code / Cursor via prompts/list
 server.registerPrompt(
@@ -211,7 +211,7 @@ console.error(`[pi-esr-mcp] Snapshot: ${prior ? "loaded" : "fresh"}`);
 
 function toolNameToDescription(name: string): string {
   const descriptions: Record<string, string> = {
-    esr_create_entity: "Create a new entity. Role MUST be: Actor (agent/system), Artifact (code/doc/report/spec), Task (draft→active→stable lifecycle), Concept (grouping), or Constraint (quality gate). Start with esr_get_context, then create entities and link them via esr_link_relation.",
+    esr_create_entity: "Create a new entity. Role MUST be: Actor (agent/system), Artifact (code/doc/report/spec), Task (draft→active→stable lifecycle), Concept (grouping), or Constraint (quality gate). Load current state via esr_get_context first, then create entities and link them via esr_link_relation.",
     esr_update_state: "Update entity state (active|stable|draft|blocked|deprecated), confidence 0-1, or metrics. When setting a Task to stable, follow closure protocol: esr_update_artifact + esr_evaluate + esr_mem_store.",
     esr_link_relation: "Create typed relation. Structural: depends_on/part_of/implements. Semantic: supports/contradicts/refines. Evaluation: evaluates/scores/validates. Operational: triggers/updates/blocks/produces. Everything meaningful is connected via relations.",
     esr_evaluate: "Record evaluation with confidence 0-1 and numeric metrics (test_count, typecheck_errors, lines_changed, etc.). Required for every Task promoted to stable. Scores are objective, not free text.",
@@ -219,7 +219,7 @@ function toolNameToDescription(name: string): string {
     esr_promote_task: "Advance Task: draft→active (work starts)→stable (complete). Stable REQUIRES: esr_update_artifact for produced files, esr_link_relation --[produces]-->, esr_evaluate with metrics, esr_mem_store observation. Optionally group under Concept via part_of.",
     esr_update_artifact: "Create/update artifact (document|code|report|spec) with versioned sections (draft|editing|stable|invalid). Every Task reaching stable MUST produce at least one artifact.",
     esr_apply_constraint: "Apply quality gate (e.g. 'all tests pass before stable', 'code review required'). Constraints block transitions until satisfied.",
-    esr_get_context: "Query current ESR graph: entities, relations, artifacts, tasks, constraints. ALWAYS call first when starting. The ESR context is the single source of truth.",
+    esr_get_context: "Query current ESR graph state. ALWAYS call first when starting. Returns full state + revision number. Pass since_revision=N to skip unchanged state (10 tokens vs 500). ESR state is NOT pre-injected.",
     esr_remove_entity: "Remove entity and cascade-delete relations. Irreversible. Use when entity no longer affects future decisions.",
     esr_remove_relation: "Remove specific typed relation. Use when connection is invalid (e.g. dependency removed).",
     esr_create_node: "Create DAG runtime node linked to a Task entity. Has dependencies, tool+inputs payload. After declaring all nodes, call esr_run to execute.",
