@@ -11,6 +11,7 @@ import {
   ESRRuntimeStateStore,
   ToolDriverRegistry,
   MemoryStore,
+  SqliteESRRepository,
   buildESRContext,
   formatObservation,
   buildJournalSummary,
@@ -25,20 +26,24 @@ let graph: ESRGraph;
 let runtimeStore: ESRRuntimeStateStore;
 let toolDrivers: ToolDriverRegistry;
 let memory: MemoryStore | null = null;
+let repository: SqliteESRRepository;
 
 export function init(
   g: ESRGraph,
   rs: ESRRuntimeStateStore,
   td: ToolDriverRegistry,
   mem: MemoryStore | null,
+  repo: SqliteESRRepository,
 ): void {
   graph = g;
   runtimeStore = rs;
   toolDrivers = td;
   memory = mem;
+  repository = repo;
 }
 
 function onMutated(): void {
+  repository.syncFromGraph(graph.toPersistedState());
   persist(graph.toPersistedState());
   runtimeStore.invalidateDependentNodes("graph mutated");
 }
@@ -97,18 +102,46 @@ export const TOOLS: Record<string, ToolEntry> = {
       state: EntityState.optional(),
       confidence: z.number().min(0).max(1).optional(),
       metrics: z.record(z.string(), z.number()).optional(),
+      expected_version: z.number().int().positive().optional(),
     }),
     handler: async (args) => {
-      const r = graph.updateEntityState(
-        args.entity_id as string,
-        args.state as any,
+      const entityId = args.entity_id as string;
+      const current = graph.getEntity(entityId);
+      if (!current) return `ERROR: Entity not found: ${entityId}`;
+
+      if (args.state === undefined && args.confidence === undefined && !args.metrics) {
+        return "ERROR: At least one of state, confidence, or metrics required";
+      }
+
+      const probe = new ESRGraph();
+      probe.loadFromState(graph.toPersistedState());
+      const probeResult = probe.updateEntityState(
+        entityId,
+        ((args.state as any) ?? current.state) as never,
         args.confidence as number | undefined,
         args.metrics as Record<string, number> | undefined,
       );
-      if (!r.ok) return `ERROR: ${r.error}`;
+      if (!probeResult.ok) return `ERROR: ${probeResult.error}`;
+
+      const next = probe.getEntity(entityId)!;
+      const result = repository.saveEntity({
+        entity: {
+          ...next,
+          updated_at: new Date().toISOString(),
+        },
+        expected_version: args.expected_version as number | undefined,
+        actor_id: "mcp",
+      });
+      if (!result.ok) {
+        if (result.conflict) {
+          return `ERROR: version_conflict entity=${result.conflict.entity_id} expected=${result.conflict.expected_version} current=${result.conflict.current_version}`;
+        }
+        return `ERROR: ${result.error}`;
+      }
+
+      graph.loadFromState(repository.loadGraph());
       onMutated();
-      const e = graph.getEntity(args.entity_id as string)!;
-      return `Updated: ${args.entity_id} state=${e.state} confidence=${e.confidence.toFixed(2)}`;
+      return `Updated: ${entityId} state=${result.value.state} confidence=${result.value.confidence.toFixed(2)} version=${result.value.version} revision=${result.revision}`;
     },
   },
 

@@ -20,6 +20,7 @@ export type {
 // ── Core state machine ────────────────────────────────────
 export { ESRGraph } from "./graph.js";
 export { buildStableSnapshot, buildGraphFingerprint, buildESRContext } from "./context.js";
+export { SqliteESRRepository } from "./repository-sqlite.js";
 
 // ── Runtime engine ────────────────────────────────────────
 export type {
@@ -42,6 +43,14 @@ export type { ToolExecutionContext, ToolExecutionHandler } from "./driver.js";
 export { getCurrentSessionId, setCurrentSessionId } from "./session.js";
 export { MemoryStore } from "./store.js";
 export type { Observation, JournalEntry } from "./store.js";
+export type {
+  ESRRepository,
+  ESREvent,
+  SaveEntityInput,
+  SaveResult,
+  VersionConflict,
+  VersionedEntity,
+} from "./repository.js";
 export {
   buildMemoryContext,
   buildActiveMemoryContext,

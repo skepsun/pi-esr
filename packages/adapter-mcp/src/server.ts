@@ -18,6 +18,7 @@ import {
   ESRRuntimeStateStore,
   ToolDriverRegistry,
   MemoryStore,
+  SqliteESRRepository,
 } from "@pi-esr/core";
 import { TOOLS, init, isMutation, getContextText } from "./tools";
 import { load, persist } from "./persistence";
@@ -30,6 +31,7 @@ const toolDrivers = new ToolDriverRegistry();
 
 const prior = load();
 if (prior) graph.loadFromState(prior);
+const repository = new SqliteESRRepository(undefined, prior ?? undefined);
 
 let memory: MemoryStore | null = null;
 try {
@@ -38,7 +40,7 @@ try {
   // better-sqlite3 not installed — memory tools report errors gracefully
 }
 
-init(graph, runtimeStore, toolDrivers, memory);
+init(graph, runtimeStore, toolDrivers, memory, repository);
 
 // ── State change hook → auto-journal ────────────────────
 
