@@ -241,6 +241,93 @@ function setupPi(): SetupResult {
   return { agent: "Pi Agent", status: "configured", message: `Created ${pirc}` };
 }
 
+// ── Remove functions ────────────────────────────────────
+
+function removeCursor(): SetupResult {
+  const file = join(HOME, ".cursor", "mcp.json");
+  if (!hasFile(file)) return { agent: "Cursor", status: "not-found", message: "No config file" };
+  try {
+    const existing = JSON.parse(readFileSync(file, "utf-8"));
+    if (existing.mcpServers && typeof existing.mcpServers === "object") {
+      delete (existing.mcpServers as Record<string, unknown>)["pi-esr"];
+      writeFileSync(file, JSON.stringify(existing, null, 2), "utf-8");
+      return { agent: "Cursor", status: "configured", message: `Removed from ${file}` };
+    }
+    return { agent: "Cursor", status: "not-found", message: "Not configured" };
+  } catch {
+    return { agent: "Cursor", status: "error", message: "Failed to read config" };
+  }
+}
+
+function removeClaude(): SetupResult {
+  if (!which("claude")) return { agent: "Claude Code", status: "not-found", message: "claude CLI not installed" };
+  try {
+    execSync("claude mcp remove pi-esr 2>/dev/null || true", { stdio: "ignore" });
+    return { agent: "Claude Code", status: "configured", message: "Removed" };
+  } catch (e: any) {
+    return { agent: "Claude Code", status: "error", message: e.message ?? String(e) };
+  }
+}
+
+function removeOpenCode(): SetupResult {
+  const file = join(HOME, ".opencode", "opencode.json");
+  if (!hasFile(file)) return { agent: "OpenCode", status: "not-found", message: "No config file" };
+  try {
+    const existing = JSON.parse(readFileSync(file, "utf-8"));
+    if (existing.mcp && typeof existing.mcp === "object") {
+      delete (existing.mcp as Record<string, unknown>)["pi-esr"];
+      writeFileSync(file, JSON.stringify(existing, null, 2), "utf-8");
+      return { agent: "OpenCode", status: "configured", message: `Removed from ${file}` };
+    }
+    return { agent: "OpenCode", status: "not-found", message: "Not configured" };
+  } catch {
+    return { agent: "OpenCode", status: "error", message: "Failed to read config" };
+  }
+}
+
+function removeCodex(): SetupResult {
+  if (!which("codex")) return { agent: "Codex", status: "not-found", message: "codex CLI not installed" };
+  try {
+    execSync("codex mcp remove pi-esr 2>/dev/null || true", { stdio: "ignore" });
+    return { agent: "Codex", status: "configured", message: "Removed" };
+  } catch (e: any) {
+    return { agent: "Codex", status: "error", message: e.message ?? String(e) };
+  }
+}
+
+function removePi(): SetupResult {
+  const pirc = join(process.cwd(), ".pirc.json");
+  if (!hasFile(pirc)) return { agent: "Pi Agent", status: "not-found", message: "No .pirc.json" };
+  try {
+    const existing = JSON.parse(readFileSync(pirc, "utf-8"));
+    const plugins: string[] = existing.plugins ?? [];
+    const filtered = plugins.filter(p => p !== "pi-esr");
+    if (filtered.length === plugins.length) {
+      return { agent: "Pi Agent", status: "not-found", message: "Not in .pirc.json" };
+    }
+    existing.plugins = filtered;
+    writeFileSync(pirc, JSON.stringify(existing, null, 2), "utf-8");
+    return { agent: "Pi Agent", status: "configured", message: `Removed from ${pirc}` };
+  } catch {
+    return { agent: "Pi Agent", status: "error", message: "Failed to read .pirc.json" };
+  }
+}
+
+export function removeAll(): SetupResult[] {
+  return [removeClaude(), removeCodex(), removeCursor(), removeOpenCode(), removePi()];
+}
+
+export function removeOne(agent: string): SetupResult {
+  switch (agent.toLowerCase()) {
+    case "claude": return removeClaude();
+    case "codex": return removeCodex();
+    case "cursor": return removeCursor();
+    case "opencode": return removeOpenCode();
+    case "pi": return removePi();
+    default: return { agent, status: "error", message: `Unknown agent: ${agent}` };
+  }
+}
+
 // ── Main ────────────────────────────────────────────────
 
 /** Check status only — no side effects, no file writes. */

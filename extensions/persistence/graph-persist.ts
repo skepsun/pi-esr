@@ -55,8 +55,6 @@ export function persistGraphState(pi: ExtensionAPI, graph: ESRGraph): void {
   // Project-level file (cross-session continuity)
   try {
     writeFileSync(getFilePath(), stateJson, { flag: "w" });
-    // Also write to legacy location for MCP adapters that haven't updated
-    writeFileSync(join(process.cwd(), ".esr-snapshot.json"), stateJson, { flag: "w" });
   } catch (err) {
     console.error("[pi-esr] Failed to write state file:", err);
   }
@@ -119,19 +117,12 @@ function tryLoadFromSessionBranch(ctx: ExtensionContext, graph: ESRGraph): boole
 
 function tryLoadFromFile(graph: ESRGraph): boolean {
   try {
-    // Primary path
     const fp = getFilePath();
-    if (existsSync(fp)) {
-      const data = JSON.parse(readFileSync(fp, "utf-8"));
-      if (isPersistedState(data)) { graph.loadFromState(data); return true; }
-    }
-    // Legacy path (MCP adapters using .esr-snapshot.json)
-    const legacyPath = join(process.cwd(), ".esr-snapshot.json");
-    if (existsSync(legacyPath)) {
-      const data = JSON.parse(readFileSync(legacyPath, "utf-8"));
-      if (isPersistedState(data)) { graph.loadFromState(data); return true; }
-    }
-    return false;
+    if (!existsSync(fp)) return false;
+    const data = JSON.parse(readFileSync(fp, "utf-8"));
+    if (!isPersistedState(data)) return false;
+    graph.loadFromState(data);
+    return true;
   } catch (err) {
     console.error("[pi-esr] Failed to load from file:", err);
     return false;

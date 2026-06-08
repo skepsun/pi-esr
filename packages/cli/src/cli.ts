@@ -11,7 +11,7 @@
  *   pi-esr status             Show configuration status
  */
 
-import { setupAll, setupOne, statusAll } from "./setup.js";
+import { setupAll, setupOne, statusAll, removeAll, removeOne } from "./setup.js";
 
 const cmd = process.argv[2] ?? "setup";
 
@@ -35,6 +35,18 @@ if (cmd === "setup") {
     const icon = r.status === "configured" ? "✅" : r.status === "already" ? "✓" : "✗";
     console.log(`  ${icon} ${r.agent}: ${r.message}`);
   }
+} else if (cmd === "remove") {
+  const agent = process.argv[3];
+  if (agent) {
+    const flag = agent.replace(/^--/, "");
+    const result = removeOne(flag);
+    printResult(result);
+  } else {
+    console.log("🔧 pi-esr remove — removing from all supported agents...\n");
+    const results = removeAll();
+    for (const r of results) printResult(r);
+    console.log("\n✅ Done. Restart your agent for changes to take effect.");
+  }
 } else {
   console.log(`Usage: pi-esr <command>`);
   console.log(`  setup          Auto-configure all agents`);
@@ -43,6 +55,12 @@ if (cmd === "setup") {
   console.log(`  setup --cursor Configure Cursor`);
   console.log(`  setup --opencode Configure OpenCode`);
   console.log(`  setup --pi     Configure Pi Agent`);
+  console.log(`  remove          Remove from all agents`);
+  console.log(`  remove --claude Remove from Claude Code`);
+  console.log(`  remove --codex   Remove from Codex`);
+  console.log(`  remove --cursor Remove from Cursor`);
+  console.log(`  remove --opencode Remove from OpenCode`);
+  console.log(`  remove --pi     Remove from Pi Agent`);
   console.log(`  status         Show setup status`);
 }
 
