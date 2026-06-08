@@ -22,8 +22,13 @@ import { createInterface } from "node:readline";
 // File paths
 // ═══════════════════════════════════════════════════════════
 
+function getDir(): string {
+  if (process.env.PI_ESR_MEMORY_DIR) return process.env.PI_ESR_MEMORY_DIR;
+  return join(process.cwd(), ".pi-esr-memory");
+}
+
 function getFilePath(): string {
-  return join(process.cwd(), ".pi-esr-memory", "esr-state.json");
+  return join(getDir(), "esr-state.json");
 }
 
 function isPersistedState(data: unknown): data is ESRPersistedState {

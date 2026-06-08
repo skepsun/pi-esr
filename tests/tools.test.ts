@@ -4,10 +4,6 @@ import { ToolDriverRegistry } from "@pi-esr/core";
 import { ESRRuntimeStateStore } from "@pi-esr/core";
 import { selectNextNode } from "@pi-esr/core";
 import { buildRuntimeContext } from "@pi-esr/core";
-import { reconstructGraph } from "../extensions/persistence/reconstruct";
-import { reconstructRuntimeState } from "../extensions/persistence/runtime-state";
-import { reconstructRuntimeCache } from "../extensions/persistence/runtime-cache";
-import { InMemoryCacheStore as CacheStore } from "@pi-esr/core";
 
 function makeEntity(graph: ESRGraph, id: string, overrides: Record<string, unknown> = {}) {
   return graph.createEntity({
@@ -378,57 +374,5 @@ describe("buildRuntimeContext", () => {
     expect(ctx).toContain("n1");
     expect(ctx).toContain("pending");
     expect(ctx).toContain("n0");
-  });
-});
-
-// ═══════════════════════════════════════════════════════════
-// Reconstruct Validation (malformed data rejection)
-// ═══════════════════════════════════════════════════════════
-
-describe("Reconstruct validation", () => {
-  it("reconstructGraph rejects malformed data", async () => {
-    const graph = new ESRGraph();
-    await reconstructGraph({
-      sessionManager: {
-        getBranch() {
-          return [
-            { type: "custom", customType: "esr-state", data: { not: "valid" } },
-          ];
-        },
-        getSessionDir() { return null; },
-      },
-    } as never, graph);
-    // Malformed data is rejected — graph stays empty (reconstruct clears before loading)
-    expect(graph.getAllEntities()).toHaveLength(0);
-  });
-
-  it("reconstructRuntimeState rejects malformed data", () => {
-    const store = new ESRRuntimeStateStore();
-    reconstructRuntimeState({
-      sessionManager: {
-        getBranch() {
-          return [
-            { type: "custom", customType: "esr-runtime-state", data: { bad: true } },
-          ];
-        },
-      },
-    } as never, store);
-    // Malformed data rejected — store is empty
-    expect(store.getNodes()).toHaveLength(0);
-  });
-
-  it("reconstructRuntimeCache rejects malformed data", () => {
-    const cache = new CacheStore();
-    reconstructRuntimeCache({
-      sessionManager: {
-        getBranch() {
-          return [
-            { type: "custom", customType: "esr-runtime-cache", data: { entries: "not-an-array" } },
-          ];
-        },
-      },
-    } as never, cache);
-    // Malformed data rejected — cache is empty
-    expect(cache.get("key1")).toBeNull();
   });
 });

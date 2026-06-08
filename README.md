@@ -18,7 +18,7 @@ That's it. Claude Code, Cursor, OpenCode, and Pi Agent are now configured with 1
 **From source:**
 ```bash
 git clone ... && cd pi-esr && npm install
-npm test                    # 233 tests
+npm test                    # 132 tests
 npm run typecheck           # Zero errors
 ```
 
@@ -138,36 +138,43 @@ extensions/
 │   └── tools.ts              4 esr_mem_* tool registrations
 ├── prompt.ts                 Prompt context builder
 └── index.ts                  Extension entry point
-tests/
-├── graph.test.ts             46 tests
+
+packages/core/tests/
+├── graph.test.ts             49 tests
 ├── cache.test.ts             4 tests
 ├── planner.test.ts           4 tests
-├── runtime.test.ts           7 tests
-├── tools.test.ts             24 tests
-├── memory.test.ts            26 tests
+├── runtime.test.ts           6 tests
+├── memory.test.ts            24 tests
 ├── session.test.ts           3 tests
-└── validate-efficiency.test.ts 15 tests
+└── validate-efficiency.test.ts 11 tests
+
+tests/
+├── tools.test.ts             21 tests
+├── persistence.test.ts       4 tests
+└── repository.test.ts        3 tests
 ```
 
 ## Validation
 
-### Correctness (233 tests, 15 test files)
+### Correctness (132 tests, 10 test files)
 
 ```bash
-npm test                    # 233 tests, <1s
+npm test                    # 132 tests, <1s
 npm run typecheck           # tsc --noEmit, zero errors
 ```
 
 | Layer | Tests | What's covered |
 |-------|-------|---------------|
-| Graph core | 46 | Entity CRUD, state transitions, cycle detection, serialization roundtrips, fingerprint stability, immutability, context builder, artifact auto-proxy |
-| Tool drivers | 24 | All 11 driver operations + scheduler + runtime context + malformed data rejection in reconstruct |
-| Runtime | 7 | Tick execution, cache hit, invalidation cascade, persisted state roundtrips, reconstruct |
+| Graph core | 49 | Entity CRUD, state transitions, cycle detection, serialization roundtrips, fingerprint stability, immutability, context builder, artifact auto-proxy |
+| Tool drivers | 21 | All 11 driver operations + scheduler + runtime context |
+| Runtime | 6 | Tick execution, cache hit, invalidation cascade, persisted state roundtrips |
 | Cache | 4 | SHA256 key determinism, input-change detection, artifact version impact, persistence roundtrip |
 | Planner | 4 | Dependency-satisfied/none/pending, blocked-by-failure classification |
-| Memory | 26 | Store CRUD, recall/search/timeline, journal, context builder, format helpers, entity ID extraction, session tag filtering |
+| Memory | 24 | Store CRUD, recall/search/timeline, journal, context builder, format helpers, entity ID extraction, session tag filtering |
 | Session | 3 | Current session ID get/set/reset |
-| Efficiency | 15 | Token compression benchmarks, prefix-cache stability, context growth rate, cost projection, DAG parallelism |
+| Efficiency | 11 | Token compression benchmarks, prefix-cache stability, context growth rate, cost projection, DAG parallelism |
+| Persistence | 4 | Reconstruct validation, malformed data rejection, session branch state loading |
+| Repository | 3 | SQLite-backed versioned entity storage, conflict detection |
 
 ### Efficiency Benchmarks
 
