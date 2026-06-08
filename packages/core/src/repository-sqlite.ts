@@ -130,11 +130,13 @@ export class SqliteESRRepository implements ESRRepository {
   }
 
   saveEntity(input: SaveEntityInput): SaveResult<VersionedEntity> {
-    const state = this.loadGraph();
-    const index = state.entities.findIndex(e => e.entity_id === input.entity.entity_id);
-    if (index === -1) return { ok: false, error: `Entity not found: ${input.entity.entity_id}` };
+    // Validate entity exists (reads current state, but this is just for
+    // the existence check and per-entity version; the actual merge happens
+    // inside the transaction against the latest committed state).
+    const probe = this.getEntity(input.entity.entity_id);
+    if (!probe) return { ok: false, error: `Entity not found: ${input.entity.entity_id}` };
 
-    const currentVersion = this.getEntity(input.entity.entity_id)?.version ?? 1;
+    const currentVersion = probe.version;
     if (input.expected_version !== undefined && currentVersion !== input.expected_version) {
       return {
         ok: false,
@@ -150,36 +152,50 @@ export class SqliteESRRepository implements ESRRepository {
 
     const now = new Date().toISOString();
     const nextVersion = currentVersion + 1;
-    const nextEntity = cloneEntity(input.entity, nextVersion, input.actor_id, input.session_id);
-    const nextState: ESRPersistedState = {
-      ...state,
-      entities: state.entities.map((entity, idx) => (idx === index ? input.entity : entity)),
-    };
     const revision = this.nextRevision();
 
-    // Optimistic locking: read current graph_version, then compare-and-swap
     let conflict = false;
-    this.db.transaction(() => {
-      const current = this.db.prepare(
-        "SELECT graph_version FROM esr_state WHERE id = 1",
-      ).get() as { graph_version: number } | undefined;
-      const expectedGraphVersion = current?.graph_version ?? 0;
+    let nextEntity: VersionedEntity | null = null;
 
-      // If the state row doesn't exist, insert it; otherwise update with version check
-      if (!current) {
+    this.db.transaction(() => {
+      // Read the latest committed state INSIDE the transaction
+      const row = this.db.prepare(
+        "SELECT state_json, graph_version FROM esr_state WHERE id = 1",
+      ).get() as { state_json: string; graph_version: number } | undefined;
+
+      const currentState: ESRPersistedState = row
+        ? JSON.parse(row.state_json)
+        : { version: 0, entities: [], relations: [], artifacts: [] };
+      const expectedGV = row?.graph_version ?? 0;
+
+      // Merge the entity update into the LATEST state (not a stale snapshot)
+      const idx = currentState.entities.findIndex(e => e.entity_id === input.entity.entity_id);
+      const nextState: ESRPersistedState = {
+        ...currentState,
+        entities: idx >= 0
+          ? currentState.entities.map((e, i) => (i === idx ? input.entity : e))
+          : currentState.entities,
+      };
+
+      // Compare-and-swap: only update if graph_version hasn't changed
+      // since we read it inside this transaction
+      if (row) {
+        const result = this.db.prepare(
+          `UPDATE esr_state
+           SET state_json = ?, updated_at = ?, graph_version = graph_version + 1
+           WHERE id = 1 AND graph_version = ?`,
+        ).run(JSON.stringify(nextState), now, expectedGV);
+        if (result.changes === 0) {
+          conflict = true;
+          return;
+        }
+      } else {
         this.db.prepare(
           "INSERT OR REPLACE INTO esr_state (id, state_json, updated_at, graph_version) VALUES (1, ?, ?, ?)",
         ).run(JSON.stringify(nextState), now, 1);
-      } else {
-        // Compare-and-swap: only update if graph_version hasn't changed
-        const result = this.db.prepare(
-          "UPDATE esr_state SET state_json = ?, updated_at = ?, graph_version = graph_version + 1 WHERE id = 1 AND graph_version = ?",
-        ).run(JSON.stringify(nextState), now, expectedGraphVersion);
-        if (result.changes === 0) {
-          conflict = true;
-          return; // rollback transaction
-        }
       }
+
+      nextEntity = cloneEntity(input.entity, nextVersion, input.actor_id, input.session_id);
 
       this.db.prepare(
         `INSERT OR REPLACE INTO esr_entity_versions (entity_id, version, updated_by, session_id, updated_at)
@@ -210,7 +226,7 @@ export class SqliteESRRepository implements ESRRepository {
       };
     }
 
-    return { ok: true, value: nextEntity, revision };
+    return { ok: true, value: nextEntity!, revision };
   }
 
   getCurrentRevision(): number {

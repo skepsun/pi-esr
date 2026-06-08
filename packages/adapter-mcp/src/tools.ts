@@ -81,9 +81,13 @@ function registerRuntimeDrivers(): void {
   toolDrivers.register("esr_update_state", async (params) => {
     const entityId = String(params.entity_id ?? "");
     if (!entityId) return { status: "failed", error: "entity_id required" };
+    // Use current state if not specified (allows confidence/metrics-only updates)
+    const current = graph.getEntity(entityId);
+    if (!current) return { status: "failed", error: `Entity not found: ${entityId}` };
+    const targetState = (params.state as any) ?? current.state;
     const result = graph.updateEntityState(
       entityId,
-      (params.state as any) ?? "active",
+      targetState,
       typeof params.confidence === "number" ? params.confidence : undefined,
       asMetricRecord(params.metrics),
     );

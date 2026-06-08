@@ -52,5 +52,7 @@ export function validateConfidence(c: number): boolean {
 }
 
 export function canTransition(from: EntityState, to: EntityState): boolean {
+  // Same-state is always allowed (updating confidence/metrics without state change)
+  if (from === to) return true;
   return VALID_TRANSITIONS[from]?.has(to) ?? false;
 }

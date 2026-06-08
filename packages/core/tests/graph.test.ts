@@ -404,6 +404,15 @@ describe("Remove Entity", () => {
     const r = g.removeEntity("nope");
     expect(r.ok).toBe(false);
   });
+
+  it("removes artifact when entity proxy is deleted", () => {
+    const g = new ESRGraph();
+    g.upsertArtifact({ id: "art-1", type: "document", sections: [{ name: "s1", state: "draft" }] });
+    expect(g.getArtifact("art-1")).toBeDefined();
+    g.removeEntity("art-1");
+    expect(g.getArtifact("art-1")).toBeUndefined();
+    expect(g.getAllEntities().find(e => e.entity_id === "art-1")).toBeUndefined();
+  });
 });
 
 // ═══════════════════════════════════════════════════════════

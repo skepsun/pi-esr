@@ -376,3 +376,110 @@ describe("buildRuntimeContext", () => {
     expect(ctx).toContain("n0");
   });
 });
+
+// ═══════════════════════════════════════════════════════════
+// DAG Execution (esr_create_node + esr_run)
+// ═══════════════════════════════════════════════════════════
+
+describe("DAG Execution", () => {
+  it("executes a node through ToolDriverRegistry", async () => {
+    const graph = new ESRGraph();
+    const store = new ESRRuntimeStateStore();
+    const drivers = new ToolDriverRegistry();
+
+    // Register driver that creates an entity
+    drivers.register("esr_create_entity", async (params) => {
+      const result = graph.createEntity({
+        entity_id: String(params.entity_id),
+        role: "Concept",
+        state: "draft",
+        confidence: 0,
+        metrics: {},
+        updated_at: new Date().toISOString(),
+      });
+      if (!result.ok) return { status: "failed", error: result.error };
+      return { status: "succeeded", outputs: { entity_id: params.entity_id } };
+    });
+
+    // Create a node and run it
+    store.createNode({
+      node_id: "n1",
+      task_entity_id: "task-1",
+      kind: "tool",
+      state: "pending",
+      inputs: { toolName: "esr_create_entity", params: { entity_id: "e1" } },
+      outputs: {},
+      dependencies: [],
+      retry_count: 0,
+      max_retries: 0,
+      driver_version: "v1",
+    });
+
+    const { computeRunnableNodes } = await import("@pi-esr/core");
+    const plan = computeRunnableNodes(store);
+    expect(plan.ready).toHaveLength(1);
+
+    const next = plan.ready[0];
+    const result = await drivers.run(
+      next.inputs.toolName as string,
+      next.inputs.params as Record<string, unknown>,
+      { graph, store },
+    );
+    expect(result.status).toBe("succeeded");
+    expect(graph.getEntity("e1")?.entity_id).toBe("e1");
+  });
+
+  it("update_state driver keeps current state when not specified", async () => {
+    const graph = new ESRGraph();
+    const store = new ESRRuntimeStateStore();
+    const drivers = new ToolDriverRegistry();
+
+    // Create an entity first
+    graph.createEntity({
+      entity_id: "e1",
+      role: "Concept",
+      state: "active",
+      confidence: 0,
+      metrics: {},
+      updated_at: new Date().toISOString(),
+    });
+
+    // Register update_state driver that preserves current state
+    drivers.register("esr_update_state", async (params) => {
+      const entityId = String(params.entity_id ?? "");
+      const current = graph.getEntity(entityId);
+      const targetState = (params.state as any) ?? current?.state ?? "active";
+      const result = graph.updateEntityState(
+        entityId,
+        targetState,
+        typeof params.confidence === "number" ? params.confidence : undefined,
+        params.metrics && typeof params.metrics === "object" ? params.metrics as Record<string, number> : undefined,
+      );
+      if (!result.ok) return { status: "failed", error: result.error };
+      return { status: "succeeded", outputs: { entity_id: entityId } };
+    });
+
+    // Run update_state WITHOUT specifying state — should keep "active"
+    store.createNode({
+      node_id: "n1",
+      task_entity_id: "task-1",
+      kind: "tool",
+      state: "pending",
+      inputs: { toolName: "esr_update_state", params: { entity_id: "e1", confidence: 0.9 } },
+      outputs: {},
+      dependencies: [],
+      retry_count: 0,
+      max_retries: 0,
+      driver_version: "v1",
+    });
+
+    const result = await drivers.run(
+      "esr_update_state",
+      { entity_id: "e1", confidence: 0.9 },
+      { graph, store },
+    );
+    expect(result.status).toBe("succeeded");
+    expect(graph.getEntity("e1")?.state).toBe("active");
+    expect(graph.getEntity("e1")?.confidence).toBe(0.9);
+  });
+});

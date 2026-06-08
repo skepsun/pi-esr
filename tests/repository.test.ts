@@ -82,4 +82,35 @@ describe("SqliteESRRepository", () => {
     expect(stale.error).toBe("version_conflict");
     expect(stale.conflict?.current_version).toBe(2);
   });
+
+  it("detects concurrent writes to different entities via graph_version", () => {
+    // Two entities — two clients update different ones concurrently
+    const initialState: ESRPersistedState = {
+      version: 1,
+      entities: [
+        { entity_id: "a", role: "Task" as const, state: "draft" as const, confidence: 0, metrics: {}, updated_at: new Date().toISOString() },
+        { entity_id: "b", role: "Task" as const, state: "draft" as const, confidence: 0, metrics: {}, updated_at: new Date().toISOString() },
+      ],
+      relations: [],
+      artifacts: [],
+    };
+    const repo = new SqliteESRRepository(":memory:", initialState);
+
+    // Client A: update entity "a"
+    const resultA = repo.saveEntity({
+      entity: { entity_id: "a", role: "Task", state: "active", confidence: 0.5, metrics: {}, updated_at: new Date().toISOString() },
+    });
+    expect(resultA.ok).toBe(true);
+
+    // Client B: update entity "b" — should also succeed (different entity)
+    const resultB = repo.saveEntity({
+      entity: { entity_id: "b", role: "Task", state: "active", confidence: 0.5, metrics: {}, updated_at: new Date().toISOString() },
+    });
+    expect(resultB.ok).toBe(true);
+
+    // Both entities updated
+    const final = repo.loadGraph();
+    expect(final.entities.find(e => e.entity_id === "a")?.state).toBe("active");
+    expect(final.entities.find(e => e.entity_id === "b")?.state).toBe("active");
+  });
 });
