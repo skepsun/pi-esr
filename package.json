@@ -16,7 +16,8 @@
   "scripts": {
     "test": "vitest run tests/",
     "test:core": "vitest run packages/core/tests/",
-    "test:all": "vitest run tests/ packages/core/tests/",
+    "test:mcp": "vitest run packages/adapter-mcp/tests/",
+    "test:all": "vitest run",
     "test:watch": "vitest",
     "build": "tsc && npm run build --workspaces --if-present",
     "typecheck": "tsc --noEmit"
