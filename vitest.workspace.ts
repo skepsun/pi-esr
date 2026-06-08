@@ -24,4 +24,16 @@ export default defineWorkspace([
       },
     },
   },
+  {
+    test: {
+      name: "mcp-adapter",
+      root: "./packages/adapter-mcp",
+      include: ["tests/**/*.test.ts"],
+    },
+    resolve: {
+      alias: {
+        "@pi-esr/core": "./packages/core/src",
+      },
+    },
+  },
 ]);

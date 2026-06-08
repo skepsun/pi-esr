@@ -60,7 +60,7 @@ function asMetricRecord(value: unknown): Record<string, number> {
   return metrics;
 }
 
-function registerRuntimeDrivers(): void {
+export function registerRuntimeDrivers(): void {
   toolDrivers.register("esr_create_entity", async (params) => {
     const entityId = String(params.entity_id ?? "");
     if (!entityId) return { status: "failed", error: "entity_id required" };

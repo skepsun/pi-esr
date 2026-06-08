@@ -16,6 +16,7 @@ import type {
   SaveEntityInput,
   SaveResult,
   VersionedEntity,
+  VersionConflict,
 } from "./repository.js";
 
 const MIGRATION_SQL = `
@@ -130,31 +131,15 @@ export class SqliteESRRepository implements ESRRepository {
   }
 
   saveEntity(input: SaveEntityInput): SaveResult<VersionedEntity> {
-    // Validate entity exists (reads current state, but this is just for
-    // the existence check and per-entity version; the actual merge happens
-    // inside the transaction against the latest committed state).
+    // Existence check outside transaction — fast-fail for wrong entity_id
     const probe = this.getEntity(input.entity.entity_id);
     if (!probe) return { ok: false, error: `Entity not found: ${input.entity.entity_id}` };
 
-    const currentVersion = probe.version;
-    if (input.expected_version !== undefined && currentVersion !== input.expected_version) {
-      return {
-        ok: false,
-        error: "version_conflict",
-        conflict: {
-          code: "version_conflict",
-          entity_id: input.entity.entity_id,
-          expected_version: input.expected_version,
-          current_version: currentVersion,
-        },
-      };
-    }
-
     const now = new Date().toISOString();
-    const nextVersion = currentVersion + 1;
     const revision = this.nextRevision();
 
     let conflict = false;
+    let versionConflict: VersionConflict | undefined;
     let nextEntity: VersionedEntity | null = null;
 
     this.db.transaction(() => {
@@ -168,7 +153,33 @@ export class SqliteESRRepository implements ESRRepository {
         : { version: 0, entities: [], relations: [], artifacts: [] };
       const expectedGV = row?.graph_version ?? 0;
 
-      // Merge the entity update into the LATEST state (not a stale snapshot)
+      // Read the target entity's current version from the LATEST state
+      const currentEntity = currentState.entities.find(e => e.entity_id === input.entity.entity_id);
+      const latestEntityVersion = currentEntity
+        ? (this.db.prepare(
+          "SELECT version FROM esr_entity_versions WHERE entity_id = ?",
+        ).get(input.entity.entity_id) as { version: number } | undefined)?.version ?? 1
+        : undefined;
+
+      if (latestEntityVersion === undefined) {
+        conflict = false; // entity disappeared between probe and transaction — let caller handle
+        return;
+      }
+
+      // Validate per-entity expected_version against the LATEST committed version
+      if (input.expected_version !== undefined && input.expected_version !== latestEntityVersion) {
+        versionConflict = {
+          code: "version_conflict",
+          entity_id: input.entity.entity_id,
+          expected_version: input.expected_version,
+          current_version: latestEntityVersion,
+        };
+        return;
+      }
+
+      const nextVersion = latestEntityVersion + 1;
+
+      // Merge the entity update into the LATEST state
       const idx = currentState.entities.findIndex(e => e.entity_id === input.entity.entity_id);
       const nextState: ESRPersistedState = {
         ...currentState,
@@ -177,8 +188,7 @@ export class SqliteESRRepository implements ESRRepository {
           : currentState.entities,
       };
 
-      // Compare-and-swap: only update if graph_version hasn't changed
-      // since we read it inside this transaction
+      // CAS: only update if graph_version hasn't changed
       if (row) {
         const result = this.db.prepare(
           `UPDATE esr_state
@@ -219,14 +229,20 @@ export class SqliteESRRepository implements ESRRepository {
       this.db.prepare("UPDATE esr_meta SET value = ? WHERE key = 'current_revision'").run(String(revision));
     })();
 
+    if (versionConflict) {
+      return { ok: false, error: "version_conflict", conflict: versionConflict };
+    }
     if (conflict) {
       return {
         ok: false,
         error: "global_version_conflict: another client modified the graph concurrently",
       };
     }
+    if (!nextEntity) {
+      return { ok: false, error: `Entity not found in latest state: ${input.entity.entity_id}` };
+    }
 
-    return { ok: true, value: nextEntity!, revision };
+    return { ok: true, value: nextEntity, revision };
   }
 
   getCurrentRevision(): number {
