@@ -3,11 +3,23 @@
  *
  * Every observation is anchored to an ESR entity_id.
  * Supports: insert, recall by entity, timeline, FTS5 text search, journal.
+ *
+ * better-sqlite3 is optional — when unavailable, MemoryStore constructor throws
+ * a descriptive error instead of crashing the entire process at import time.
  */
 
-import Database from "better-sqlite3";
+import { createRequire } from "node:module";
+import type Database from "better-sqlite3";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+
+const require = createRequire(import.meta.url);
+let DatabaseModule: any = null;
+try {
+  DatabaseModule = require("better-sqlite3");
+} catch {
+  // better-sqlite3 not installed — MemoryStore will report errors gracefully
+}
 
 export interface Observation {
   id: number;
@@ -48,6 +60,10 @@ function ensureDir(): void {
 }
 
 function openDB(dbPath?: string): Database.Database {
+  const Database = DatabaseModule?.default ?? DatabaseModule;
+  if (!Database) {
+    throw new Error("better-sqlite3 is required for MemoryStore. Install it: npm install better-sqlite3");
+  }
   if (dbPath) {
     // In-memory or custom path — skip directory creation
     const db = new Database(dbPath);

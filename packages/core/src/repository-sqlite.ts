@@ -1,8 +1,12 @@
 /**
  * pi-esr: SQLite-backed ESR repository.
+ *
+ * better-sqlite3 is optional — when unavailable, constructor throws
+ * instead of crashing the entire process at import time.
  */
 
-import Database from "better-sqlite3";
+import { createRequire } from "node:module";
+import type Database from "better-sqlite3";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ESREntity, ESRPersistedState } from "./types.js";
@@ -56,7 +60,19 @@ function getDbDir(): string {
   return join(process.cwd(), ".pi-esr-memory");
 }
 
+const require = createRequire(import.meta.url);
+let DatabaseModule: any = null;
+try {
+  DatabaseModule = require("better-sqlite3");
+} catch {
+  // better-sqlite3 not installed — SqliteESRRepository will report errors gracefully
+}
+
 function openDB(dbPath?: string): Database.Database {
+  const Database = DatabaseModule?.default ?? DatabaseModule;
+  if (!Database) {
+    throw new Error("better-sqlite3 is required for SqliteESRRepository. Install it: npm install better-sqlite3");
+  }
   if (dbPath) {
     const db = new Database(dbPath);
     db.pragma("foreign_keys = ON");
