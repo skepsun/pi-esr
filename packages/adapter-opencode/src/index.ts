@@ -6,7 +6,7 @@
  */
 import { buildESRContext, ESRGraph, MemoryStore, buildActiveMemoryContext } from "@pi-esr/core";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname, resolve, parse } from "node:path";
 
 export interface OpenCodeMCPConfig {
   type: "local";
@@ -56,8 +56,28 @@ export function withESR(config: OpenCodeConfig = {}, opts?: {
 
 // ── In-process helpers (for embedded use without MCP subprocess) ──
 
-const SNAPSHOT_PATH = () =>
-  process.env.ESR_SNAPSHOT_PATH ?? join(process.cwd(), ".pi-esr-memory", "esr-state.json");
+const DEFAULT_SNAPSHOT = () =>
+  join(process.cwd(), ".pi-esr-memory", "esr-state.json");
+
+/** Walk up from cwd to find an existing ESR state file. */
+function findSnapshot(): string | null {
+  if (process.env.ESR_SNAPSHOT_PATH && existsSync(process.env.ESR_SNAPSHOT_PATH)) {
+    return process.env.ESR_SNAPSHOT_PATH;
+  }
+  let dir = resolve(process.cwd());
+  const root = parse(dir).root;
+  const candidates = [".pi-esr-memory/esr-state.json", ".esr-snapshot.json"];
+  while (dir !== root) {
+    for (const c of candidates) {
+      const p = join(dir, c);
+      if (existsSync(p)) return p;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
 
 let _graph: ESRGraph | null = null;
 let _memory: MemoryStore | null | undefined;
@@ -66,9 +86,10 @@ let _memory: MemoryStore | null | undefined;
 export function getGraph(): ESRGraph {
   if (!_graph) {
     _graph = new ESRGraph();
-    if (existsSync(SNAPSHOT_PATH())) {
+    const snapPath = findSnapshot() ?? DEFAULT_SNAPSHOT();
+    if (existsSync(snapPath)) {
       try {
-        const raw = readFileSync(SNAPSHOT_PATH(), "utf-8");
+        const raw = readFileSync(snapPath, "utf-8");
         const data = JSON.parse(raw);
         if (typeof data.version === "number" && Array.isArray(data.entities)) {
           _graph.loadFromState(data);
@@ -94,7 +115,8 @@ export function getMemory(): MemoryStore | null {
 /** Persist current graph state to snapshot. */
 export function saveGraph(): void {
   if (_graph) {
-    writeFileSync(SNAPSHOT_PATH(), JSON.stringify(_graph.toPersistedState(), null, 2), "utf-8");
+    const targetPath = findSnapshot() ?? DEFAULT_SNAPSHOT();
+    writeFileSync(targetPath, JSON.stringify(_graph.toPersistedState(), null, 2), "utf-8");
   }
 }
 

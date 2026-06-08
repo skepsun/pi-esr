@@ -19,8 +19,17 @@
   "dependencies": {
     "@pi-esr/adapter-mcp": "0.3.0",
     "@pi-esr/adapter-opencode": "0.3.0",
-    "@pi-esr/core": "0.3.0"
+    "@pi-esr/core": "0.3.0",
+    "pi-esr": "file:"
   },
-  "keywords": ["esr", "state-machine", "semantic-graph", "mcp", "claude-code", "cursor", "opencode"],
+  "keywords": [
+    "esr",
+    "state-machine",
+    "semantic-graph",
+    "mcp",
+    "claude-code",
+    "cursor",
+    "opencode"
+  ],
   "license": "MIT"
 }
