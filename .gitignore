@@ -4,3 +4,7 @@ dist/
 .DS_Store
 .pi-esr-memory/
 .pirc.json
+.agents/
+.pi/
+AGENTS.md
+CLAUDE.md

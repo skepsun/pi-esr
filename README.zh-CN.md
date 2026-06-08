@@ -17,15 +17,19 @@ pi-esr setup
 
 即可完成 — 17 个 ESR 工具（13 个图/运行时 + 4 个记忆工具）已就绪。
 
-### MCP 客户端（Claude Code、Cursor）
+### MCP 客户端（Claude Code、Codex、Cursor）
 
 ```bash
-claude mcp add pi-esr -- npx @pi-esr/adapter-mcp
-
-# 然后加载 ESR 方法论提示词，让 LLM 学会使用工具：
-/prompts get pi-esr esr-system-prompt
-# → 将输出内容粘贴到 CLAUDE.md 或项目指令中
+npm install -g pi-esr
+pi-esr setup --claude
+pi-esr setup --codex
 ```
+
+`pi-esr setup --claude` 会注册 MCP 服务，并把受管的 ESR 指令块同步到 `CLAUDE.md`。
+
+`pi-esr setup --codex` 会注册 MCP 服务，并把受管的 ESR 指令块同步到 `AGENTS.md`。
+
+如果你更偏好手动方式，MCP 服务仍然通过 prompts discovery 暴露 `esr-system-prompt`。
 
 ### 从源码安装
 

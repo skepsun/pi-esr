@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pi-esr": {
+      "command": "npx",
+      "args": ["@pi-esr/adapter-mcp"]
+    }
+  }
+}

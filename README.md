@@ -17,15 +17,19 @@ pi-esr setup
 
 That's it — 17 ESR tools (13 graph/runtime + 4 memory) are now available.
 
-### MCP Clients (Claude Code, Cursor)
+### MCP Clients (Claude Code, Codex, Cursor)
 
 ```bash
-claude mcp add pi-esr -- npx @pi-esr/adapter-mcp
-
-# Then load the ESR methodology so the LLM knows how to use the tools:
-/prompts get pi-esr esr-system-prompt
-# → paste the output into your CLAUDE.md or project instructions
+npm install -g pi-esr
+pi-esr setup --claude
+pi-esr setup --codex
 ```
+
+`pi-esr setup --claude` registers the MCP server and syncs a managed ESR block into `CLAUDE.md`.
+
+`pi-esr setup --codex` registers the MCP server and syncs a managed ESR block into `AGENTS.md`.
+
+If you prefer manual setup, the MCP server still exposes `esr-system-prompt` via prompts discovery.
 
 ### From Source
 

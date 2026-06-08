@@ -1,0 +1,20 @@
+{
+  "name": "pi-esr",
+  "interface": {
+    "displayName": "ESR (Engineering State Runtime)",
+    "shortDescription": "Structured task tracking and state management"
+  },
+  "plugins": [
+    {
+      "name": "pi-esr",
+      "source": {
+        "source": "local",
+        "path": "./plugins/pi-esr"
+      },
+      "policy": {
+        "installation": "AVAILABLE"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

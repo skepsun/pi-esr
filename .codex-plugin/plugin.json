@@ -1,0 +1,37 @@
+{
+  "name": "pi-esr",
+  "version": "0.3.0",
+  "description": "Engineering State Runtime — structured task tracking, state management, and DAG execution for coding agents. Turn every coding session into a queryable, auditable knowledge graph.",
+  "author": {
+    "name": "pi-esr contributors"
+  },
+  "homepage": "https://github.com/skepsun/pi-esr",
+  "repository": "https://github.com/skepsun/pi-esr",
+  "license": "MIT",
+  "keywords": [
+    "state-management",
+    "task-tracking",
+    "knowledge-graph",
+    "dag-execution",
+    "engineering",
+    "workflow"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "ESR (Engineering State Runtime)",
+    "shortDescription": "Structured entity tracking, state management, and DAG execution for coding agents",
+    "longDescription": "ESR transforms every coding session into a queryable knowledge graph. Create entities (Actor, Artifact, Task, Concept, Constraint), track tasks through draft→active→stable lifecycle, link typed relations, execute DAGs, and recall past context with memory tools.",
+    "developerName": "pi-esr",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Write",
+      "State"
+    ],
+    "websiteURL": "https://github.com/skepsun/pi-esr",
+    "defaultPrompt": [
+      "Structure your work with ESR: call esr_get_context first, create entities for tasks/modules/decisions, track progress through state transitions, and follow the closure protocol when completing work"
+    ],
+    "logo": "./assets/pi-esr.png",
+    "brandColor": "#6366F1"
+  }
+}
