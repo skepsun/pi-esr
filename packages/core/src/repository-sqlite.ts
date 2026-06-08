@@ -29,7 +29,8 @@ const MIGRATION_SQL = `
   CREATE TABLE IF NOT EXISTS esr_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     state_json TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    graph_version INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS esr_entity_versions (
@@ -107,6 +108,8 @@ export class SqliteESRRepository implements ESRRepository {
   constructor(dbPath?: string, initialState?: ESRPersistedState) {
     this.db = openDB(dbPath);
     this.db.exec(MIGRATION_SQL);
+    // Migration: add graph_version column for existing v0.3.x databases
+    try { this.db.exec("ALTER TABLE esr_state ADD COLUMN graph_version INTEGER NOT NULL DEFAULT 0"); } catch { /* already exists */ }
     if (initialState) this.seedState(initialState);
   }
 
@@ -154,10 +157,30 @@ export class SqliteESRRepository implements ESRRepository {
     };
     const revision = this.nextRevision();
 
+    // Optimistic locking: read current graph_version, then compare-and-swap
+    let conflict = false;
     this.db.transaction(() => {
-      this.db.prepare(
-        "INSERT OR REPLACE INTO esr_state (id, state_json, updated_at) VALUES (1, ?, ?)",
-      ).run(JSON.stringify(nextState), now);
+      const current = this.db.prepare(
+        "SELECT graph_version FROM esr_state WHERE id = 1",
+      ).get() as { graph_version: number } | undefined;
+      const expectedGraphVersion = current?.graph_version ?? 0;
+
+      // If the state row doesn't exist, insert it; otherwise update with version check
+      if (!current) {
+        this.db.prepare(
+          "INSERT OR REPLACE INTO esr_state (id, state_json, updated_at, graph_version) VALUES (1, ?, ?, ?)",
+        ).run(JSON.stringify(nextState), now, 1);
+      } else {
+        // Compare-and-swap: only update if graph_version hasn't changed
+        const result = this.db.prepare(
+          "UPDATE esr_state SET state_json = ?, updated_at = ?, graph_version = graph_version + 1 WHERE id = 1 AND graph_version = ?",
+        ).run(JSON.stringify(nextState), now, expectedGraphVersion);
+        if (result.changes === 0) {
+          conflict = true;
+          return; // rollback transaction
+        }
+      }
+
       this.db.prepare(
         `INSERT OR REPLACE INTO esr_entity_versions (entity_id, version, updated_by, session_id, updated_at)
          VALUES (?, ?, ?, ?, ?)`,
@@ -179,6 +202,13 @@ export class SqliteESRRepository implements ESRRepository {
       );
       this.db.prepare("UPDATE esr_meta SET value = ? WHERE key = 'current_revision'").run(String(revision));
     })();
+
+    if (conflict) {
+      return {
+        ok: false,
+        error: "global_version_conflict: another client modified the graph concurrently",
+      };
+    }
 
     return { ok: true, value: nextEntity, revision };
   }
@@ -217,8 +247,8 @@ export class SqliteESRRepository implements ESRRepository {
     const now = new Date().toISOString();
     this.db.transaction(() => {
       this.db.prepare(
-        "INSERT OR REPLACE INTO esr_state (id, state_json, updated_at) VALUES (1, ?, ?)",
-      ).run(JSON.stringify(state), now);
+        "INSERT OR REPLACE INTO esr_state (id, state_json, updated_at, graph_version) VALUES (1, ?, ?, ?)",
+      ).run(JSON.stringify(state), now, state.version);
       for (const entity of state.entities) {
         const existing = this.db.prepare(
           "SELECT version FROM esr_entity_versions WHERE entity_id = ?",
@@ -244,8 +274,8 @@ export class SqliteESRRepository implements ESRRepository {
     ]);
     this.db.transaction(() => {
       this.db.prepare(
-        "INSERT OR REPLACE INTO esr_state (id, state_json, updated_at) VALUES (1, ?, ?)",
-      ).run(JSON.stringify(state), now);
+        "INSERT OR REPLACE INTO esr_state (id, state_json, updated_at, graph_version) VALUES (1, ?, ?, ?)",
+      ).run(JSON.stringify(state), now, state.version);
       for (const row of versionRows) {
         this.db.prepare(
           `INSERT OR REPLACE INTO esr_entity_versions (entity_id, version, updated_by, session_id, updated_at)

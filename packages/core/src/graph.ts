@@ -315,11 +315,13 @@ export class ESRGraph {
     this.version = state.version;
   }
 
-  /** Remove an entity and cascade-delete all its relations. */
+  /** Remove an entity and cascade-delete all its relations.
+   *  If the entity is an artifact proxy, also removes the artifact itself. */
   removeEntity(id: string): { ok: true } | { ok: false; error: string } {
     if (!this.entities.has(id)) return { ok: false, error: `Entity not found: ${id}` };
     this.entities.delete(id);
     this.relations = this.relations.filter(r => r.from !== id && r.to !== id);
+    this.artifacts.delete(id);
     this.version++;
     return { ok: true };
   }

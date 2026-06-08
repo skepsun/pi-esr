@@ -40,12 +40,170 @@ export function init(
   toolDrivers = td;
   memory = mem;
   repository = repo;
+  registerRuntimeDrivers();
 }
 
 function onMutated(): void {
   repository.syncFromGraph(graph.toPersistedState());
   persist(graph.toPersistedState());
   runtimeStore.invalidateDependentNodes("graph mutated");
+}
+
+// ── Runtime driver registration (for esr_run DAG execution) ──
+
+function asMetricRecord(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const metrics: Record<string, number> = {};
+  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof v === "number") metrics[key] = v;
+  }
+  return metrics;
+}
+
+function registerRuntimeDrivers(): void {
+  toolDrivers.register("esr_create_entity", async (params) => {
+    const entityId = String(params.entity_id ?? "");
+    if (!entityId) return { status: "failed", error: "entity_id required" };
+    const result = graph.createEntity({
+      entity_id: entityId,
+      role: (params.role as any) ?? "Concept",
+      state: (params.state as any) ?? "draft",
+      confidence: typeof params.confidence === "number" ? params.confidence : 0,
+      metrics: asMetricRecord(params.metrics),
+      label: typeof params.label === "string" ? params.label : undefined,
+      updated_at: new Date().toISOString(),
+    });
+    if (!result.ok) return { status: "failed", error: result.error };
+    onMutated();
+    return { status: "succeeded", outputs: { entity_id: entityId } };
+  });
+
+  toolDrivers.register("esr_update_state", async (params) => {
+    const entityId = String(params.entity_id ?? "");
+    if (!entityId) return { status: "failed", error: "entity_id required" };
+    const result = graph.updateEntityState(
+      entityId,
+      (params.state as any) ?? "active",
+      typeof params.confidence === "number" ? params.confidence : undefined,
+      asMetricRecord(params.metrics),
+    );
+    if (!result.ok) return { status: "failed", error: result.error };
+    onMutated();
+    return { status: "succeeded", outputs: { entity_id: entityId } };
+  });
+
+  toolDrivers.register("esr_link_relation", async (params) => {
+    const from = String(params.from ?? "");
+    const to = String(params.to ?? "");
+    const type = String(params.type ?? "");
+    if (!from || !to || !type) return { status: "failed", error: "from, to, type required" };
+    const result = graph.linkRelation(from, to, type as any);
+    if (!result.ok) return { status: "failed", error: result.error };
+    onMutated();
+    return { status: "succeeded", outputs: { from, to, type } };
+  });
+
+  toolDrivers.register("esr_evaluate", async (params) => {
+    const entityId = String(params.entity_id ?? "");
+    const evaluator = String(params.evaluator ?? "");
+    if (!entityId || !evaluator || typeof params.confidence !== "number") {
+      return { status: "failed", error: "entity_id, evaluator, confidence required" };
+    }
+    const result = graph.evaluate(entityId, evaluator, params.confidence, asMetricRecord(params.metrics));
+    if (!result.ok) return { status: "failed", error: result.error };
+    onMutated();
+    return { status: "succeeded", outputs: { entity_id: entityId, evaluator } };
+  });
+
+  toolDrivers.register("esr_score", async (params) => {
+    const entityId = String(params.entity_id ?? "");
+    if (!entityId || typeof params.score_value !== "number" || !params.score_type) {
+      return { status: "failed", error: "entity_id, score_value, score_type required" };
+    }
+    const result = graph.score(entityId, params.score_value, String(params.score_type));
+    if (!result.ok) return { status: "failed", error: result.error };
+    onMutated();
+    return { status: "succeeded", outputs: { entity_id: entityId } };
+  });
+
+  toolDrivers.register("esr_promote_task", async (params) => {
+    const entityId = String(params.entity_id ?? "");
+    const newState = String(params.new_state ?? "");
+    if (!entityId || !newState) return { status: "failed", error: "entity_id, new_state required" };
+    const result = graph.promoteTask(entityId, newState as "active" | "stable");
+    if (!result.ok) return { status: "failed", error: result.error };
+    onMutated();
+    return { status: "succeeded", outputs: { entity_id: entityId, state: newState } };
+  });
+
+  toolDrivers.register("esr_update_artifact", async (params) => {
+    const id = String(params.id ?? "");
+    const type = String(params.type ?? "");
+    const sections = Array.isArray(params.sections) ? params.sections : [];
+    if (!id || !type) return { status: "failed", error: "id, type required" };
+    const result = graph.upsertArtifact({
+      id,
+      type: type as any,
+      version: typeof params.version === "number" ? params.version : undefined,
+      sections: sections.map((s: any) => ({ name: String(s.name ?? ""), state: (s.state as any) ?? "draft" })),
+    });
+    if (!result.ok) return { status: "failed", error: result.error };
+    onMutated();
+    return { status: "succeeded", outputs: { id } };
+  });
+
+  toolDrivers.register("esr_apply_constraint", async (params) => {
+    const entityId = String(params.entity_id ?? "");
+    const description = String(params.constraint_description ?? "");
+    if (!entityId || !description) return { status: "failed", error: "entity_id, constraint_description required" };
+    const result = graph.applyConstraint(entityId, description);
+    if (!result.ok) return { status: "failed", error: result.error };
+    onMutated();
+    return { status: "succeeded", outputs: { entity_id: entityId } };
+  });
+
+  toolDrivers.register("esr_remove_entity", async (params) => {
+    const entityId = String(params.entity_id ?? "");
+    if (!entityId) return { status: "failed", error: "entity_id required" };
+    const result = graph.removeEntity(entityId);
+    if (!result.ok) return { status: "failed", error: result.error };
+    onMutated();
+    return { status: "succeeded", outputs: { entity_id: entityId } };
+  });
+
+  toolDrivers.register("esr_remove_relation", async (params) => {
+    const from = String(params.from ?? "");
+    const to = String(params.to ?? "");
+    const type = String(params.type ?? "");
+    if (!from || !to || !type) return { status: "failed", error: "from, to, type required" };
+    const result = graph.removeRelation(from, to, type as any);
+    if (!result.ok) return { status: "failed", error: result.error };
+    onMutated();
+    return { status: "succeeded", outputs: { from, to, type } };
+  });
+
+  toolDrivers.register("esr_create_node", async (params) => {
+    const nodeId = String(params.node_id ?? "");
+    const taskEntityId = String(params.task_entity_id ?? "");
+    const kind = String(params.kind ?? "");
+    const inputs = params.inputs && typeof params.inputs === "object" && !Array.isArray(params.inputs)
+      ? params.inputs as Record<string, unknown>
+      : {};
+    if (!nodeId || !taskEntityId || !kind) return { status: "failed", error: "node_id, task_entity_id, kind required" };
+    runtimeStore.createNode({
+      node_id: nodeId,
+      task_entity_id: taskEntityId,
+      kind: kind as "tool",
+      state: "pending",
+      inputs,
+      outputs: {},
+      dependencies: Array.isArray(params.dependencies) ? params.dependencies.map(String) : [],
+      retry_count: 0,
+      max_retries: typeof params.max_retries === "number" ? params.max_retries : 0,
+      driver_version: typeof params.driver_version === "string" ? params.driver_version : "v1",
+    });
+    return { status: "succeeded", outputs: { node_id: nodeId } };
+  });
 }
 
 // ── Zod schemas ────────────────────────────────────────

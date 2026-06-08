@@ -7,7 +7,7 @@
  * Override with ESR_SNAPSHOT_PATH env var.
  */
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname, resolve, parse } from "node:path";
 import type { ESRPersistedState } from "@pi-esr/core";
 
@@ -18,6 +18,7 @@ export function persist(state: ESRPersistedState): void {
   // Write to the existing file location if found, otherwise to default path
   const existing = findStateFile();
   const targetPath = existing ?? join(process.cwd(), ".pi-esr-memory", "esr-state.json");
+  mkdirSync(dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, JSON.stringify(state, null, 2), "utf-8");
 }
 
