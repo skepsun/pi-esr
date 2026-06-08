@@ -15,6 +15,20 @@ pi-esr setup
 
 即可完成。Claude Code、Cursor、OpenCode 和 Pi Agent 现已配置 17 个 ESR 工具（13 个图/运行时 + 4 个记忆工具）。
 
+### 在 MCP 客户端中使用（Claude Code、Cursor）
+
+```bash
+# 注册为 MCP 服务器
+claude mcp add pi-esr -- npx @pi-esr/adapter-mcp
+
+# 然后在 Claude Code 中加载 ESR 方法论提示词：
+#   /prompts get pi-esr esr-system-prompt
+# 这会教 LLM 何时以及如何使用 ESR 工具。
+#
+# 提示：将 prompt 输出添加到 CLAUDE.md 或项目指令中，
+# 这样每个会话都会自动生效。
+```
+
 **从源码安装：**
 ```bash
 git clone ... && cd pi-esr && npm install

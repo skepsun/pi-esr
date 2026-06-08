@@ -15,6 +15,20 @@ pi-esr setup
 
 That's it. Claude Code, Cursor, OpenCode, and Pi Agent are now configured with 17 ESR tools (13 graph/runtime + 4 memory).
 
+### Using with MCP Clients (Claude Code, Cursor)
+
+```bash
+# Add as MCP server
+claude mcp add pi-esr -- npx @pi-esr/adapter-mcp
+
+# Then in Claude Code, load the ESR methodology prompt:
+#   /prompts get pi-esr esr-system-prompt
+# This teaches the LLM when and how to use ESR tools.
+#
+# Tip: add the prompt output to your CLAUDE.md or project instructions
+# so it's always available in every session.
+```
+
 **From source:**
 ```bash
 git clone ... && cd pi-esr && npm install
