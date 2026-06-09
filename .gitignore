@@ -8,3 +8,4 @@ dist/
 .pi/
 AGENTS.md
 CLAUDE.md
+.claude/worktrees/
