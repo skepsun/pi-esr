@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { MemoryStore, type Observation } from "../src";
-import { buildMemoryContext, buildActiveMemoryContext, formatObservation } from "../src";
-import { recordStateChange, buildJournalSummary } from "../src";
+import { recordStateChange, buildJournalSummary } from "../src/journal.js";
+import { buildMemoryContext, buildActiveMemoryContext, formatObservation } from "../src/recall.js";
+import { MemoryStore, type Observation } from "../src/store.js";
 
 function extractEntityIds(systemPrompt: string): string[] {
   const ids = new Set<string>();

@@ -11,7 +11,17 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join, dirname, resolve, parse } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const require = createRequire(import.meta.url);
+let DatabaseModule: any = null;
+try {
+  DatabaseModule = require("better-sqlite3");
+} catch {
+  // Optional dependency unavailable — memory injection is skipped.
+}
 
 // ── Re-implement minimal context builder (no imports from @pi-esr/core to keep bundle tiny) ──
 
@@ -44,6 +54,18 @@ interface MinimalState {
   entities: MinimalEntity[];
   relations: MinimalRelation[];
   artifacts: MinimalArtifact[];
+}
+
+interface MemoryObservation {
+  entity_id: string;
+  content: string;
+  created_at: string;
+}
+
+interface MemoryJournalEntry {
+  entity_id: string;
+  transition: string;
+  created_at: string;
 }
 
 function isValidState(data: unknown): data is MinimalState {
@@ -87,6 +109,74 @@ function load(): MinimalState | null {
   }
 }
 
+function findMemoryDbPath(): string | null {
+  const memoryDir = process.env.PI_ESR_MEMORY_DIR || join(process.cwd(), ".pi-esr-memory");
+  const dbPath = join(memoryDir, "memory.db");
+  return existsSync(dbPath) ? dbPath : null;
+}
+
+export function buildMemoryContext(entityIds: string[]): string {
+  const Database = DatabaseModule?.default ?? DatabaseModule;
+  if (!Database || entityIds.length === 0) return "[ESR_MEMORY]\n\n  (no memories)\n";
+
+  const dbPath = findMemoryDbPath();
+  if (!dbPath) return "[ESR_MEMORY]\n\n  (no memories)\n";
+
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const lines: string[] = ["[ESR_MEMORY]", ""];
+    const sortedEntityIds = [...entityIds].sort();
+    let hasContent = false;
+
+    const obsStmt = db.prepare(
+      "SELECT entity_id, content, created_at FROM observations WHERE entity_id = ? ORDER BY created_at DESC LIMIT ?",
+    );
+    const countStmt = db.prepare(
+      "SELECT COUNT(*) as cnt FROM observations WHERE entity_id = ?",
+    );
+    const journalStmt = db.prepare(
+      "SELECT entity_id, transition, created_at FROM journal WHERE entity_id = ? ORDER BY created_at DESC LIMIT ?",
+    );
+
+    for (const entityId of sortedEntityIds) {
+      const observations = obsStmt.all(entityId, 5) as MemoryObservation[];
+      const journalEntries = journalStmt.all(entityId, 3) as MemoryJournalEntry[];
+      if (observations.length === 0 && journalEntries.length === 0) continue;
+
+      const countRow = countStmt.get(entityId) as { cnt: number } | undefined;
+      const obsCount = countRow?.cnt ?? observations.length;
+      const suffix = obsCount > observations.length ? ` (+${obsCount - observations.length} more)` : "";
+
+      lines.push(`${entityId} (${obsCount} obs${suffix}):`);
+
+      for (const entry of journalEntries) {
+        lines.push(`  [${entry.created_at.slice(0, 16)}] ${entry.transition}`);
+      }
+
+      for (const observation of observations) {
+        const content = observation.content.length > 200
+          ? observation.content.slice(0, 197) + "..."
+          : observation.content;
+        lines.push(`  ${observation.created_at.slice(0, 16)}: ${content}`);
+      }
+
+      lines.push("");
+      hasContent = true;
+    }
+
+    if (!hasContent) {
+      lines.push("  (no memories)");
+      lines.push("");
+    }
+
+    return lines.join("\n");
+  } catch {
+    return "[ESR_MEMORY]\n\n  (no memories)\n";
+  } finally {
+    db.close();
+  }
+}
+
 function sortEntities(entities: MinimalEntity[]): MinimalEntity[] {
   return [...entities].sort((a, b) => a.entity_id.localeCompare(b.entity_id));
 }
@@ -97,7 +187,7 @@ function sortRelations(relations: MinimalRelation[]): MinimalRelation[] {
   );
 }
 
-function buildMethodology(): string {
+export function buildMethodology(): string {
   return [
     "",
     "ESR Quick Reference",
@@ -132,7 +222,7 @@ function buildMethodology(): string {
   ].join("\n");
 }
 
-function buildContext(state: MinimalState): string {
+export function buildContext(state: MinimalState): string {
   const lines: string[] = ["[ESR_CONTEXT]", ""];
   const sortedEntities = sortEntities(state.entities);
   const sortedRelations = sortRelations(state.relations);
@@ -203,23 +293,33 @@ function buildContext(state: MinimalState): string {
 
 // ── Main ─────────────────────────────────────────────────
 
-const state = load();
-
-if (!state) {
-  console.log(JSON.stringify({
-    continue: true,
-    suppressOutput: true,
-  }));
-  process.exit(0);
+export function buildHookContext(state: MinimalState): string {
+  return buildMethodology()
+    + "\n"
+    + buildContext(state)
+    + "\n\n"
+    + buildMemoryContext(sortEntities(state.entities).map(entity => entity.entity_id));
 }
 
-const contextText = buildMethodology() + "\n" + buildContext(state);
+export function main(): void {
+  const state = load();
 
-console.log(JSON.stringify({
-  hookSpecificOutput: {
-    hookEventName: "SessionStart",
-    additionalContext: contextText,
-  },
-}));
+  if (!state) {
+    console.log(JSON.stringify({
+      continue: true,
+      suppressOutput: true,
+    }));
+    return;
+  }
 
-process.exit(0);
+  console.log(JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "SessionStart",
+      additionalContext: buildHookContext(state),
+    },
+  }));
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main();
+}

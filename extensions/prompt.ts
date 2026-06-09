@@ -1,8 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ESRGraph } from "@pi-esr/core";
-import type { ESRRuntimeStateStore } from "@pi-esr/core";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -26,5 +24,5 @@ function getPromptContent(): string {
  */
 export function buildStaticPrompt(): string {
   const promptContent = getPromptContent();
-  return `\n\n${promptContent}\n\nYou have access to ESR tools (esr_*). Use the ESR ontology above to make structured, ontology-validated state transitions. For any meaningful work, create entities, link relations, and update states via the ESR tools. When you need multi-step execution, declare a DAG with esr_create_node, then call esr_run to execute it. Call esr_get_context to load the current graph state — it is NOT pre-injected.`;
+  return `\n\n${promptContent}\n\nYou have access to ESR tools (esr_*). Use the ESR ontology above to make structured, ontology-validated state transitions. For any meaningful work, create entities, link relations, and update states via the ESR tools. Call esr_get_context to load the current graph state — it is NOT pre-injected.`;
 }

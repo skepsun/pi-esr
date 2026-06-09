@@ -29,7 +29,8 @@ function isValidState(data: unknown): data is ESRPersistedState {
     typeof d.version === "number" &&
     Array.isArray(d.entities) &&
     Array.isArray(d.relations) &&
-    Array.isArray(d.artifacts)
+    Array.isArray(d.artifacts) &&
+    (d.memory_refs === undefined || Array.isArray(d.memory_refs))
   );
 }
 

@@ -53,8 +53,15 @@ export function buildGraphFingerprint(graph: ESRGraph): string {
  * When `sinceRevision` is provided and matches the current graph version,
  * returns a minimal "no changes" message to avoid re-transmitting identical
  * state. When it does not match (or is omitted), returns the full context.
+ *
+ * When `entityId` + `depth` are provided, returns only the neighborhood subgraph
+ * centered on that entity within `depth` hops. When omitted, returns all entities.
  */
-export function buildESRContext(graph: ESRGraph, opts?: { sinceRevision?: number }): string {
+export function buildESRContext(graph: ESRGraph, opts?: {
+  sinceRevision?: number;
+  entityId?: string;
+  depth?: number;
+}): string {
   const currentVersion = graph.getVersion();
 
   // Incremental: no changes
@@ -69,18 +76,42 @@ export function buildESRContext(graph: ESRGraph, opts?: { sinceRevision?: number
   }
 
   const lines: string[] = ["[ESR_CONTEXT]", ""];
-  const sortedEntities = sortEntities(graph.getAllEntities());
-  const sortedRelations = sortRelations(graph.getAllRelations());
+
+  // Select entities/relations: neighborhood or full graph
+  let entities: ESREntity[];
+  let relations: ESRRelation[];
+  if (opts?.entityId && opts?.depth !== undefined) {
+    const nh = graph.getNeighborhood(opts.entityId, opts.depth);
+    entities = nh.entities;
+    relations = nh.relations;
+    lines.push(`(neighborhood: entity=${opts.entityId} depth=${opts.depth})`);
+    lines.push("");
+  } else {
+    entities = graph.getAllEntities();
+    relations = graph.getAllRelations();
+  }
+
+  const sortedEntities = sortEntities(entities);
+  const sortedRelations = sortRelations(relations);
+
+  // Artifacts remain full — small and always relevant
   const sortedArtifacts = sortArtifacts(graph.getAllArtifacts());
 
   lines.push("ENTITIES:");
   if (sortedEntities.length === 0) {
     lines.push("  (none)");
   } else {
+    const hasMore = opts?.entityId && entities.length < graph.getAllEntities().length;
     for (const e of sortedEntities) {
-      const label = e.label ? ` "${e.label}"` : "";
-      const metrics = Object.keys(e.metrics).length ? ` metrics=${JSON.stringify(e.metrics)}` : "";
-      lines.push(`  ${e.entity_id} [${e.role}] state=${e.state} confidence=${e.confidence.toFixed(2)}${label}${metrics}`);
+      const parts: string[] = [];
+      parts.push(`${e.entity_id} [${e.role}] state=${e.state}`);
+      if (e.confidence !== 1.0) parts.push(`conf=${e.confidence.toFixed(2)}`);
+      if (e.label) parts.push(`"${e.label}"`);
+      if (Object.keys(e.metrics).length) parts.push(`metrics=${JSON.stringify(e.metrics)}`);
+      lines.push(`  ${parts.join(" ")}`);
+    }
+    if (hasMore) {
+      lines.push(`  ... (${graph.getAllEntities().length - entities.length} more entities outside neighborhood)`);
     }
   }
   lines.push("");
@@ -102,29 +133,6 @@ export function buildESRContext(graph: ESRGraph, opts?: { sinceRevision?: number
       for (const s of a.sections) lines.push(`    - ${s.name}: ${s.state}`);
     }
   }
-  lines.push("");
-
-  const tasks = sortedEntities.filter(e => e.role === "Task");
-  lines.push("TASKS:");
-  if (tasks.length === 0) {
-    lines.push("  (none)");
-  } else {
-    for (const t of tasks) {
-      lines.push(`  ${t.entity_id} state=${t.state} confidence=${t.confidence.toFixed(2)}${t.label ? ` "${t.label}"` : ""}`);
-    }
-  }
-  lines.push("");
-
-  const constraints = sortedEntities.filter(e => e.role === "Constraint");
-  lines.push("CONSTRAINTS:");
-  if (constraints.length === 0) {
-    lines.push("  (none)");
-  } else {
-    for (const c of constraints) {
-      lines.push(`  ${c.entity_id} state=${c.state}${c.label ? ` "${c.label}"` : ""}`);
-    }
-  }
-
   lines.push("");
   lines.push(`ESR revision: ${currentVersion}`);
 

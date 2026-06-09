@@ -13,9 +13,23 @@
     "rootDir": ".",
     "declaration": true,
     "paths": {
-      "@pi-esr/core": ["./packages/core/src"]
+      "@pi-esr/core": ["./packages/core/src"],
+      "@pi-esr/memory-bridge": ["./packages/memory-bridge/src"],
+      "@pi-esr/domain-pack": ["./packages/domain-pack/src"],
+      "@pi-esr/domain-pack-software": ["./packages/domain-pack-software/src"],
+      "@pi-esr/domain-pack-govdoc": ["./packages/domain-pack-govdoc/src"],
+      "@pi-esr/domain-pack-planning-review": ["./packages/domain-pack-planning-review/src"]
     }
   },
-  "include": ["extensions/**/*.ts", "tests/**/*.ts", "packages/core/src/**/*.ts"],
+  "include": [
+    "extensions/**/*.ts",
+    "tests/**/*.ts",
+    "packages/core/src/**/*.ts",
+    "packages/memory-bridge/src/**/*.ts",
+    "packages/domain-pack/src/**/*.ts",
+    "packages/domain-pack-software/src/**/*.ts",
+    "packages/domain-pack-govdoc/src/**/*.ts",
+    "packages/domain-pack-planning-review/src/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

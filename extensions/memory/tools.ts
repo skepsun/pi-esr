@@ -8,15 +8,14 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
+import type { ESRMemoryProvider } from "@pi-esr/memory-bridge";
+import { SqliteMemoryProvider } from "@pi-esr/memory-bridge";
+import { buildJournalSummary, recordStateChange } from "../../packages/core/src/journal.js";
+import { buildActiveMemoryContext } from "../../packages/core/src/recall.js";
 import {
   ESRGraph,
-  MemoryStore,
   getCurrentSessionId,
-  formatObservation,
-  buildJournalSummary,
-  buildActiveMemoryContext,
-} from "@pi-esr/core";
-import { recordStateChange } from "@pi-esr/core";
+} from "../core";
 
 function okText(text: string, details: Record<string, unknown>) {
   return {
@@ -32,13 +31,13 @@ function errorText(error: string) {
   };
 }
 
-export function buildMemoryPromptContext(graph: ESRGraph, store: MemoryStore): string {
+export function buildMemoryPromptContext(graph: ESRGraph, store: SqliteMemoryProvider): string {
   const entityIds = graph.getAllEntities().map(e => e.entity_id);
   if (entityIds.length === 0) return "";
-  return "\n\n" + buildActiveMemoryContext(store, entityIds);
+  return "\n\n" + buildActiveMemoryContext(store.getStore(), entityIds);
 }
 
-export function registerMemoryTools(pi: ExtensionAPI, store: MemoryStore): void {
+export function registerMemoryTools(pi: ExtensionAPI, store: ESRMemoryProvider): void {
   // ── esr_mem_store ──────────────────────────────────────────
 
   pi.registerTool({
@@ -60,10 +59,15 @@ export function registerMemoryTools(pi: ExtensionAPI, store: MemoryStore): void 
       const allTags = sessionId
         ? [...(userTags ?? []), `session:${sessionId}`]
         : userTags;
-      const id = store.store(params.entity_id, params.content, { tags: allTags });
-      return okText(`Stored memory #${id} anchored to ${params.entity_id}`, {
+      const ref = await store.store({
+        entityId: params.entity_id,
+        kind: "note",
+        content: params.content,
+        metadata: { tags: allTags, sessionId: sessionId ?? undefined },
+      });
+      return okText(`Stored memory #${ref.ref_id} anchored to ${params.entity_id}`, {
         action: "esr_mem_store",
-        id,
+        id: ref.ref_id,
         entity_id: params.entity_id,
       });
     },
@@ -86,12 +90,18 @@ export function registerMemoryTools(pi: ExtensionAPI, store: MemoryStore): void 
 
       let results;
       if (params.entity_id && params.query) {
-        const searched = store.search(String(params.query), limit * 2);
-        results = searched.filter(o => o.entity_id === params.entity_id).slice(0, limit);
+        results = await store.fetch(await store.search({
+          query: String(params.query),
+          entityId: String(params.entity_id),
+          limit,
+        }));
       } else if (params.entity_id) {
-        results = store.recall(String(params.entity_id), limit);
+        results = await store.fetch(await store.listByEntity({
+          entityId: String(params.entity_id),
+          limit,
+        }));
       } else if (params.query) {
-        results = store.search(String(params.query), limit);
+        results = await store.fetch(await store.search({ query: String(params.query), limit }));
       } else {
         return errorText("Provide entity_id, query, or both");
       }
@@ -100,7 +110,12 @@ export function registerMemoryTools(pi: ExtensionAPI, store: MemoryStore): void 
         return okText("No memories found.", { action: "esr_mem_recall", count: 0, results: [] });
       }
 
-      const text = results.map(o => formatObservation(o)).join("\n");
+      const text = results.map((record) => {
+        if (store instanceof SqliteMemoryProvider) {
+          return store.formatRecord(record);
+        }
+        return `[${record.ref.entity_id}] ${record.ref.created_at.slice(0, 16)}: ${record.content}`;
+      }).join("\n");
       return okText(text, { action: "esr_mem_recall", count: results.length, results });
     },
   });
@@ -119,15 +134,20 @@ export function registerMemoryTools(pi: ExtensionAPI, store: MemoryStore): void 
     async execute(_id, params) {
       const entityId = String(params.entity_id);
       const limit = typeof params.limit === "number" ? params.limit : 50;
-      const entries = store.timeline(entityId, limit);
+      const entries = await store.timeline({ entityId, limit });
 
       if (entries.length === 0) {
         return okText(`No memories for ${entityId}`, { action: "esr_mem_timeline", entity_id: entityId, count: 0 });
       }
 
       const text = [
-        `Timeline for ${entityId} (${store.countFor(entityId)} total, showing ${entries.length}):`,
-        ...entries.map(o => formatObservation(o)),
+        `Timeline for ${entityId} (${await store.count(entityId)} total, showing ${entries.length}):`,
+        ...entries.map((record) => {
+          if (store instanceof SqliteMemoryProvider) {
+            return store.formatRecord({ ref: record.ref, content: record.content });
+          }
+          return `[${record.ref.entity_id}] ${record.ref.created_at.slice(0, 16)}: ${record.content}`;
+        }),
       ].join("\n");
 
       return okText(text, { action: "esr_mem_timeline", entity_id: entityId, count: entries.length });
@@ -155,7 +175,7 @@ export function registerMemoryTools(pi: ExtensionAPI, store: MemoryStore): void 
         if (typeof entityId !== "string" || typeof transition !== "string") {
           return errorText("entity_id and transition required for record action");
         }
-        store.journal(entityId, transition);
+        await store.recordJournal(entityId, transition);
         return okText(`Recorded journal entry: ${entityId} ${transition}`, {
           action: "esr_mem_journal",
           entity_id: entityId,
@@ -164,13 +184,17 @@ export function registerMemoryTools(pi: ExtensionAPI, store: MemoryStore): void 
       }
 
       if (params.entity_id) {
-        const summary = buildJournalSummary(store, [String(params.entity_id)]);
+        const summary = store instanceof SqliteMemoryProvider
+          ? buildJournalSummary(store.getStore(), [String(params.entity_id)])
+          : (await store.getJournal({ entityId: String(params.entity_id), limit: 30 }))
+            .map((entry) => `${entry.created_at.slice(0, 16)} ${entry.transition}`)
+            .join("\n") || "(no journal entries)";
         return okText(summary, {
           action: "esr_mem_journal",
           entity_id: params.entity_id,
         });
       } else {
-        const entries = store.getAllJournal(30);
+        const entries = await store.getAllJournal(30);
         const text = entries.length === 0
           ? "(no journal entries)"
           : entries.map(e => `[${e.entity_id}] ${e.created_at.slice(0, 16)}: ${e.transition}`).join("\n");
@@ -180,8 +204,8 @@ export function registerMemoryTools(pi: ExtensionAPI, store: MemoryStore): void 
   });
 }
 
-export function onStateChange(store: MemoryStore, entityId: string, oldState: string, newState: string, label?: string, fingerprint?: string): void {
-  recordStateChange(store, {
+export function onStateChange(store: SqliteMemoryProvider, entityId: string, oldState: string, newState: string, label?: string, fingerprint?: string): void {
+  recordStateChange(store.getStore(), {
     entity_id: entityId,
     old_state: oldState,
     new_state: newState,

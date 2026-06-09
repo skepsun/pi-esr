@@ -1,8 +1,11 @@
 {
   "mcpServers": {
     "pi-esr": {
-      "command": "npx",
-      "args": ["@pi-esr/adapter-mcp"]
+      "command": "node",
+      "args": ["packages/adapter-mcp/dist/server.js"],
+      "env": {
+        "ESR_STORE_PATH": ".pi-esr-memory"
+      }
     }
   }
 }

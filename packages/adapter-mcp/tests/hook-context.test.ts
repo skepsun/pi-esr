@@ -1,0 +1,79 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { afterEach, describe, expect, it } from "vitest";
+import { MemoryStore } from "../../core/src/store.js";
+import { buildHookContext, buildMemoryContext } from "../src/hook-context";
+
+const tmpDirs: string[] = [];
+
+afterEach(() => {
+  delete process.env.PI_ESR_MEMORY_DIR;
+  while (tmpDirs.length > 0) {
+    const dir = tmpDirs.pop();
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+function makeTmpDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), "pi-esr-hook-"));
+  tmpDirs.push(dir);
+  return dir;
+}
+
+function makeState() {
+  return {
+    version: 7,
+    entities: [
+      { entity_id: "task-b", role: "Task", state: "active", confidence: 0.8, metrics: {}, label: "Task B" },
+      { entity_id: "task-a", role: "Task", state: "stable", confidence: 1, metrics: {}, label: "Task A" },
+    ],
+    relations: [],
+    artifacts: [],
+  };
+}
+
+describe("hook context", () => {
+  it("injects memory summary for known entities", () => {
+    const memoryDir = makeTmpDir();
+    process.env.PI_ESR_MEMORY_DIR = memoryDir;
+    mkdirSync(memoryDir, { recursive: true });
+
+    const store = new MemoryStore(join(memoryDir, "memory.db"));
+    store.journal("task-a", "draft -> active");
+    store.store("task-a", "Implemented the stable workflow for task A");
+    store.store("task-b", "Investigating remaining edge cases for task B");
+    store.close();
+
+    const context = buildHookContext(makeState());
+    expect(context).toContain("[ESR_CONTEXT]");
+    expect(context).toContain("[ESR_MEMORY]");
+    expect(context).toContain("task-a (1 obs):");
+    expect(context).toContain("draft -> active");
+    expect(context).toContain("Implemented the stable workflow for task A");
+    expect(context).toContain("Investigating remaining edge cases for task B");
+  });
+
+  it("returns deterministic memory ordering by entity_id", () => {
+    const memoryDir = makeTmpDir();
+    process.env.PI_ESR_MEMORY_DIR = memoryDir;
+    mkdirSync(memoryDir, { recursive: true });
+
+    const store = new MemoryStore(join(memoryDir, "memory.db"));
+    store.store("task-b", "Second alphabetically");
+    store.store("task-a", "First alphabetically");
+    store.close();
+
+    const memory = buildMemoryContext(["task-b", "task-a"]);
+    expect(memory.indexOf("task-a")).toBeLessThan(memory.indexOf("task-b"));
+  });
+
+  it("falls back to no memories when memory db is absent", () => {
+    const memoryDir = makeTmpDir();
+    process.env.PI_ESR_MEMORY_DIR = memoryDir;
+    writeFileSync(join(memoryDir, "placeholder.txt"), "noop");
+
+    const memory = buildMemoryContext(["task-a"]);
+    expect(memory).toContain("(no memories)");
+  });
+});

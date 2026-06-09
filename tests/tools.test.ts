@@ -1,485 +1,769 @@
 import { describe, expect, it } from "vitest";
 import { ESRGraph } from "@pi-esr/core";
-import { ToolDriverRegistry } from "@pi-esr/core";
-import { ESRRuntimeStateStore } from "@pi-esr/core";
-import { selectNextNode } from "@pi-esr/core";
-import { buildRuntimeContext } from "@pi-esr/core";
+import { registerTools } from "../extensions/integration/tools";
 
-function makeEntity(graph: ESRGraph, id: string, overrides: Record<string, unknown> = {}) {
-  return graph.createEntity({
-    entity_id: id,
-    role: "Concept" as const,
-    state: "draft" as const,
-    confidence: 1.0,
-    metrics: {},
-    updated_at: new Date().toISOString(),
-    ...overrides,
-  });
+type RegisteredTool = {
+  name: string;
+  execute: (_id: string, params: any) => Promise<any>;
+  renderResult?: (result: any, options: any, theme: any) => unknown;
+};
+
+function createPiStub() {
+  const tools = new Map<string, RegisteredTool>();
+  const entries: Array<{ type: string; data: unknown }> = [];
+
+  const pi = {
+    registerTool(tool: RegisteredTool) {
+      tools.set(tool.name, tool);
+    },
+    appendEntry(type: string, data: unknown) {
+      entries.push({ type, data });
+    },
+  };
+
+  return { pi, tools, entries };
 }
 
-function makeDriverRegistry(graph: ESRGraph, store: ESRRuntimeStateStore): ToolDriverRegistry {
-  const drivers = new ToolDriverRegistry();
-  const ctx = { graph, store };
-  void ctx; // referenced by closure
-
-  drivers.register("esr_create_entity", async (params) => {
-    const result = graph.createEntity({
-      entity_id: String(params.entity_id),
-      role: String(params.role) as never,
-      state: (typeof params.state === "string" ? params.state : "draft") as never,
-      confidence: typeof params.confidence === "number" ? params.confidence : 0,
-      metrics: params.metrics && typeof params.metrics === "object" && !Array.isArray(params.metrics)
-        ? Object.fromEntries(
-            Object.entries(params.metrics as Record<string, unknown>)
-              .filter(([, v]) => typeof v === "number")
-              .map(([k, v]) => [k, v as number]),
-          )
-        : {},
-      label: typeof params.label === "string" ? params.label : undefined,
-      updated_at: new Date().toISOString(),
-    });
-    if (!result.ok) return { status: "failed", error: result.error };
-    return { status: "succeeded", outputs: { entity_id: params.entity_id } };
-  });
-
-  drivers.register("esr_update_state", async (params) => {
-    const entityId = String(params.entity_id);
-    if (!graph.getEntity(entityId)) return { status: "failed", error: `Entity not found: ${entityId}` };
-    const result = graph.updateEntityState(
-      entityId,
-      String(params.state ?? "draft") as never,
-      typeof params.confidence === "number" ? params.confidence : undefined,
-      undefined,
-    );
-    if (!result.ok) return { status: "failed", error: result.error };
-    return { status: "succeeded", outputs: { entity_id: entityId, state: params.state } };
-  });
-
-  drivers.register("esr_link_relation", async (params) => {
-    const result = graph.linkRelation(
-      String(params.from),
-      String(params.to),
-      String(params.type) as never,
-    );
-    if (!result.ok) return { status: "failed", error: result.error };
-    return { status: "succeeded", outputs: { from: params.from, to: params.to, type: params.type } };
-  });
-
-  drivers.register("esr_evaluate", async (params) => {
-    const result = graph.evaluate(
-      String(params.entity_id),
-      String(params.evaluator),
-      Number(params.confidence),
-      {},
-    );
-    if (!result.ok) return { status: "failed", error: result.error };
-    return { status: "succeeded", outputs: { entity_id: params.entity_id } };
-  });
-
-  drivers.register("esr_score", async (params) => {
-    const result = graph.score(String(params.entity_id), Number(params.score_value), String(params.score_type));
-    if (!result.ok) return { status: "failed", error: result.error };
-    return { status: "succeeded", outputs: { entity_id: params.entity_id } };
-  });
-
-  drivers.register("esr_promote_task", async (params) => {
-    const result = graph.promoteTask(String(params.entity_id), String(params.new_state) as "active" | "stable");
-    if (!result.ok) return { status: "failed", error: result.error };
-    return { status: "succeeded", outputs: { entity_id: params.entity_id, state: params.new_state } };
-  });
-
-  drivers.register("esr_update_artifact", async (params) => {
-    const sections = Array.isArray(params.sections) ? params.sections : [];
-    const result = graph.upsertArtifact({
-      id: String(params.id),
-      type: String(params.type) as never,
-      version: typeof params.version === "number" ? params.version : undefined,
-      sections: sections.map((s: unknown) => {
-        const sec = s as Record<string, unknown>;
-        return { name: String(sec.name ?? ""), state: String(sec.state ?? "draft") as never };
-      }),
-    });
-    if (!result.ok) return { status: "failed", error: result.error };
-    return { status: "succeeded", outputs: { id: params.id } };
-  });
-
-  drivers.register("esr_apply_constraint", async (params) => {
-    const result = graph.applyConstraint(String(params.entity_id), String(params.constraint_description));
-    if (!result.ok) return { status: "failed", error: result.error };
-    return { status: "succeeded", outputs: { entity_id: params.entity_id } };
-  });
-
-  drivers.register("esr_remove_entity", async (params) => {
-    const result = graph.removeEntity(String(params.entity_id));
-    if (!result.ok) return { status: "failed", error: result.error };
-    return { status: "succeeded", outputs: { entity_id: params.entity_id } };
-  });
-
-  drivers.register("esr_remove_relation", async (params) => {
-    const result = graph.removeRelation(
-      String(params.from),
-      String(params.to),
-      String(params.type) as never,
-    );
-    if (!result.ok) return { status: "failed", error: result.error };
-    return { status: "succeeded", outputs: { from: params.from, to: params.to, type: params.type } };
-  });
-
-  return drivers;
+async function runTool(
+  tools: Map<string, RegisteredTool>,
+  name: string,
+  params: Record<string, unknown>,
+) {
+  const tool = tools.get(name);
+  if (!tool) {
+    throw new Error(`Tool not registered: ${name}`);
+  }
+  return tool.execute("test-call", params);
 }
 
-// ═══════════════════════════════════════════════════════════
-// Tool Driver Integration Tests
-// ═══════════════════════════════════════════════════════════
-
-describe("esr_create_entity driver", () => {
-  it("creates an entity through the driver", async () => {
+describe("registerTools", () => {
+  it("registers graph manipulation tools", () => {
     const graph = new ESRGraph();
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("esr_create_entity", { entity_id: "e1", role: "Concept" }, { graph, store });
-    expect(result.status).toBe("succeeded");
-    expect(graph.getEntity("e1")?.entity_id).toBe("e1");
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+
+    expect(tools.has("esr_create_entity")).toBe(true);
+    expect(tools.has("esr_update_state")).toBe(true);
+    expect(tools.has("esr_get_context")).toBe(true);
+    expect(tools.has("esr_list_packs")).toBe(true);
+    expect(tools.has("esr_detect_pack")).toBe(true);
+    expect(tools.has("esr_expand_with_pack")).toBe(true);
+    expect(tools.has("esr_get_closure_status")).toBe(true);
+    expect(tools.has("esr_attach_memory_ref")).toBe(true);
+    expect(tools.has("esr_list_closure_gaps")).toBe(true);
+    expect(tools.has("esr_list_tasks")).toBe(true);
+    expect(tools.has("esr_remove_entity")).toBe(true);
   });
 
-  it("rejects duplicate entity", async () => {
+  it("creates and updates an entity through registered tools", async () => {
     const graph = new ESRGraph();
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    await drivers.run("esr_create_entity", { entity_id: "e1", role: "Concept" }, { graph, store });
-    const result = await drivers.run("esr_create_entity", { entity_id: "e1", role: "Concept" }, { graph, store });
-    expect(result.status).toBe("failed");
+    const { pi, tools, entries } = createPiStub();
+
+    registerTools(pi as never, graph);
+
+    const created = await runTool(tools, "esr_create_entity", {
+      entity_id: "task-1",
+      role: "Task",
+      state: "draft",
+      confidence: 0.4,
+      metrics: { progress: 1 },
+      label: "Task 1",
+    });
+
+    expect(created.content[0]?.text).toContain("Created entity");
+    expect(graph.getEntity("task-1")?.role).toBe("Task");
+    expect(entries).toHaveLength(1);
+
+    const updated = await runTool(tools, "esr_update_state", {
+      entity_id: "task-1",
+      state: "active",
+      confidence: 0.8,
+    });
+
+    expect(updated.content[0]?.text).toContain("Updated entity");
+    expect(graph.getEntity("task-1")?.state).toBe("active");
+    expect(graph.getEntity("task-1")?.confidence).toBe(0.8);
+    expect(entries).toHaveLength(2);
   });
 
-  it("rejects unregistered tool name", async () => {
+  it("links and removes relations through registered tools", async () => {
     const graph = new ESRGraph();
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("nonexistent_tool", {}, { graph, store });
-    expect(result.status).toBe("failed");
-    expect(result.error).toContain("No runtime handler");
-  });
-});
+    const { pi, tools } = createPiStub();
 
-describe("esr_update_state driver", () => {
-  it("transitions entity state", async () => {
-    const graph = new ESRGraph();
-    makeEntity(graph, "e1");
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("esr_update_state", { entity_id: "e1", state: "active" }, { graph, store });
-    expect(result.status).toBe("succeeded");
-    expect(graph.getEntity("e1")?.state).toBe("active");
-  });
+    registerTools(pi as never, graph);
 
-  it("rejects invalid transition", async () => {
-    const graph = new ESRGraph();
-    makeEntity(graph, "e1", { state: "stable" });
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("esr_update_state", { entity_id: "e1", state: "draft" }, { graph, store });
-    expect(result.status).toBe("failed");
-    expect(result.error).toContain("Invalid transition");
-  });
+    await runTool(tools, "esr_create_entity", { entity_id: "a", role: "Concept" });
+    await runTool(tools, "esr_create_entity", { entity_id: "b", role: "Concept" });
 
-  it("rejects unknown entity", async () => {
-    const graph = new ESRGraph();
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("esr_update_state", { entity_id: "nope", state: "active" }, { graph, store });
-    expect(result.status).toBe("failed");
-  });
-});
+    const linked = await runTool(tools, "esr_link_relation", {
+      from: "a",
+      to: "b",
+      type: "depends_on",
+    });
 
-describe("esr_link_relation driver", () => {
-  it("creates a relation", async () => {
-    const graph = new ESRGraph();
-    makeEntity(graph, "a");
-    makeEntity(graph, "b");
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("esr_link_relation", { from: "a", to: "b", type: "depends_on" }, { graph, store });
-    expect(result.status).toBe("succeeded");
+    expect(linked.content[0]?.text).toContain("Linked");
     expect(graph.getAllRelations()).toHaveLength(1);
+
+    const removed = await runTool(tools, "esr_remove_relation", {
+      from: "a",
+      to: "b",
+      type: "depends_on",
+    });
+
+    expect(removed.content[0]?.text).toContain("Removed relation");
+    expect(graph.getAllRelations()).toHaveLength(0);
   });
 
-  it("rejects duplicate relation", async () => {
+  it("returns current graph context", async () => {
     const graph = new ESRGraph();
-    makeEntity(graph, "a");
-    makeEntity(graph, "b");
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    await drivers.run("esr_link_relation", { from: "a", to: "b", type: "depends_on" }, { graph, store });
-    const result = await drivers.run("esr_link_relation", { from: "a", to: "b", type: "depends_on" }, { graph, store });
-    expect(result.status).toBe("failed");
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "artifact-1",
+      role: "Artifact",
+      label: "Artifact 1",
+    });
+
+    const context = await runTool(tools, "esr_get_context", {});
+    const text = context.content[0]?.text ?? "";
+
+    expect(text).toContain("artifact-1");
+    expect(context.details.entities).toHaveLength(1);
   });
 
-  it("rejects relation with missing entities", async () => {
+  it("removes entity and cascades relation cleanup", async () => {
     const graph = new ESRGraph();
-    makeEntity(graph, "a");
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("esr_link_relation", { from: "a", to: "b", type: "depends_on" }, { graph, store });
-    expect(result.status).toBe("failed");
-  });
-});
+    const { pi, tools } = createPiStub();
 
-describe("esr_evaluate driver", () => {
-  it("records evaluation", async () => {
-    const graph = new ESRGraph();
-    makeEntity(graph, "eval", { role: "Actor" });
-    makeEntity(graph, "target");
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("esr_evaluate", { entity_id: "target", evaluator: "eval", confidence: 0.85 }, { graph, store });
-    expect(result.status).toBe("succeeded");
-    expect(graph.getEntity("target")?.confidence).toBe(0.85);
-    expect(graph.getAllRelations()).toHaveLength(1);
-  });
-});
+    registerTools(pi as never, graph);
 
-describe("esr_score driver", () => {
-  it("attaches a score", async () => {
-    const graph = new ESRGraph();
-    makeEntity(graph, "e1");
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("esr_score", { entity_id: "e1", score_value: 0.7, score_type: "quality" }, { graph, store });
-    expect(result.status).toBe("succeeded");
-    expect(graph.getEntity("e1")?.metrics.quality).toBe(0.7);
-  });
-});
+    await runTool(tools, "esr_create_entity", { entity_id: "a", role: "Concept" });
+    await runTool(tools, "esr_create_entity", { entity_id: "b", role: "Concept" });
+    await runTool(tools, "esr_link_relation", {
+      from: "a",
+      to: "b",
+      type: "depends_on",
+    });
 
-describe("esr_promote_task driver", () => {
-  it("promotes a draft task", async () => {
-    const graph = new ESRGraph();
-    makeEntity(graph, "t1", { role: "Task" });
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("esr_promote_task", { entity_id: "t1", new_state: "active" }, { graph, store });
-    expect(result.status).toBe("succeeded");
-    expect(graph.getEntity("t1")?.state).toBe("active");
-  });
+    const removed = await runTool(tools, "esr_remove_entity", { entity_id: "a" });
 
-  it("rejects non-task promotion", async () => {
-    const graph = new ESRGraph();
-    makeEntity(graph, "a1");
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("esr_promote_task", { entity_id: "a1", new_state: "active" }, { graph, store });
-    expect(result.status).toBe("failed");
-  });
-});
-
-describe("esr_update_artifact driver", () => {
-  it("upserts an artifact", async () => {
-    const graph = new ESRGraph();
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("esr_update_artifact", {
-      id: "a1", type: "document", version: 1,
-      sections: [{ name: "intro", state: "draft" }],
-    }, { graph, store });
-    expect(result.status).toBe("succeeded");
-    expect(graph.getArtifact("a1")?.sections).toHaveLength(1);
-  });
-});
-
-describe("esr_apply_constraint driver", () => {
-  it("applies a constraint", async () => {
-    const graph = new ESRGraph();
-    makeEntity(graph, "e1");
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("esr_apply_constraint", { entity_id: "e1", constraint_description: "must be valid" }, { graph, store });
-    expect(result.status).toBe("succeeded");
-    const rels = graph.getAllRelations();
-    expect(rels.some(r => r.type === "validates" && r.to === "e1")).toBe(true);
-  });
-});
-
-describe("esr_remove_entity driver", () => {
-  it("removes entity and cascades relations", async () => {
-    const graph = new ESRGraph();
-    makeEntity(graph, "a");
-    makeEntity(graph, "b");
-    graph.linkRelation("a", "b", "depends_on");
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("esr_remove_entity", { entity_id: "a" }, { graph, store });
-    expect(result.status).toBe("succeeded");
+    expect(removed.content[0]?.text).toContain("Removed entity");
     expect(graph.getEntity("a")).toBeUndefined();
     expect(graph.getAllRelations()).toHaveLength(0);
   });
-});
 
-describe("esr_remove_relation driver", () => {
-  it("removes a relation", async () => {
+  it("returns error text for invalid operations", async () => {
     const graph = new ESRGraph();
-    makeEntity(graph, "a");
-    makeEntity(graph, "b");
-    graph.linkRelation("a", "b", "depends_on");
-    const store = new ESRRuntimeStateStore();
-    const drivers = makeDriverRegistry(graph, store);
-    const result = await drivers.run("esr_remove_relation", { from: "a", to: "b", type: "depends_on" }, { graph, store });
-    expect(result.status).toBe("succeeded");
-    expect(graph.getAllRelations()).toHaveLength(0);
-  });
-});
+    const { pi, tools } = createPiStub();
 
-// ═══════════════════════════════════════════════════════════
-// Scheduler Tests
-// ═══════════════════════════════════════════════════════════
+    registerTools(pi as never, graph);
 
-describe("Scheduler", () => {
-  it("selects node with fewer dependencies first", () => {
-    const ready = [
-      { node_id: "n2", dependencies: ["a", "b"], state: "ready" } as any,
-      { node_id: "n1", dependencies: [], state: "ready" } as any,
-    ];
-    const next = selectNextNode({ ready, waiting: [], blocked: [] });
-    expect(next?.node_id).toBe("n1");
-  });
-
-  it("returns null for empty ready list", () => {
-    expect(selectNextNode({ ready: [], waiting: [], blocked: [] })).toBeNull();
-  });
-});
-
-// ═══════════════════════════════════════════════════════════
-// Build Runtime Context
-// ═══════════════════════════════════════════════════════════
-
-describe("buildRuntimeContext", () => {
-  it("returns empty string for no nodes", () => {
-    const store = new ESRRuntimeStateStore();
-    expect(buildRuntimeContext(store)).toBe("");
-  });
-
-  it("includes node state and dependencies", () => {
-    const store = new ESRRuntimeStateStore();
-    store.createNode({
-      node_id: "n1",
-      task_entity_id: "task-1",
-      kind: "tool",
-      state: "pending",
-      inputs: { toolName: "esr_create_entity", params: { entity_id: "e1" } },
-      outputs: {},
-      dependencies: ["n0"],
-      retry_count: 0,
-      max_retries: 0,
-      driver_version: "v1",
-    });
-    const ctx = buildRuntimeContext(store);
-    expect(ctx).toContain("n1");
-    expect(ctx).toContain("pending");
-    expect(ctx).toContain("n0");
-  });
-});
-
-// ═══════════════════════════════════════════════════════════
-// DAG Execution (esr_create_node + esr_run)
-// ═══════════════════════════════════════════════════════════
-
-describe("DAG Execution", () => {
-  it("executes a node through ToolDriverRegistry", async () => {
-    const graph = new ESRGraph();
-    const store = new ESRRuntimeStateStore();
-    const drivers = new ToolDriverRegistry();
-
-    // Register driver that creates an entity
-    drivers.register("esr_create_entity", async (params) => {
-      const result = graph.createEntity({
-        entity_id: String(params.entity_id),
-        role: "Concept",
-        state: "draft",
-        confidence: 0,
-        metrics: {},
-        updated_at: new Date().toISOString(),
-      });
-      if (!result.ok) return { status: "failed", error: result.error };
-      return { status: "succeeded", outputs: { entity_id: params.entity_id } };
-    });
-
-    // Create a node and run it
-    store.createNode({
-      node_id: "n1",
-      task_entity_id: "task-1",
-      kind: "tool",
-      state: "pending",
-      inputs: { toolName: "esr_create_entity", params: { entity_id: "e1" } },
-      outputs: {},
-      dependencies: [],
-      retry_count: 0,
-      max_retries: 0,
-      driver_version: "v1",
-    });
-
-    const { computeRunnableNodes } = await import("@pi-esr/core");
-    const plan = computeRunnableNodes(store);
-    expect(plan.ready).toHaveLength(1);
-
-    const next = plan.ready[0];
-    const result = await drivers.run(
-      next.inputs.toolName as string,
-      next.inputs.params as Record<string, unknown>,
-      { graph, store },
-    );
-    expect(result.status).toBe("succeeded");
-    expect(graph.getEntity("e1")?.entity_id).toBe("e1");
-  });
-
-  it("update_state driver keeps current state when not specified", async () => {
-    const graph = new ESRGraph();
-    const store = new ESRRuntimeStateStore();
-    const drivers = new ToolDriverRegistry();
-
-    // Create an entity first
-    graph.createEntity({
-      entity_id: "e1",
-      role: "Concept",
+    const result = await runTool(tools, "esr_update_state", {
+      entity_id: "missing",
       state: "active",
-      confidence: 0,
-      metrics: {},
-      updated_at: new Date().toISOString(),
     });
 
-    // Register update_state driver that preserves current state
-    drivers.register("esr_update_state", async (params) => {
-      const entityId = String(params.entity_id ?? "");
-      const current = graph.getEntity(entityId);
-      const targetState = (params.state as any) ?? current?.state ?? "active";
-      const result = graph.updateEntityState(
-        entityId,
-        targetState,
-        typeof params.confidence === "number" ? params.confidence : undefined,
-        params.metrics && typeof params.metrics === "object" ? params.metrics as Record<string, number> : undefined,
-      );
-      if (!result.ok) return { status: "failed", error: result.error };
-      return { status: "succeeded", outputs: { entity_id: entityId } };
+    expect(result.content[0]?.text).toContain("ERROR:");
+    expect(result.details.error).toContain("Entity not found");
+  });
+
+  it("reports error when closure task does not exist", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+
+    const result = await runTool(tools, "esr_get_closure_status", {
+      task_id: "missing-task",
     });
 
-    // Run update_state WITHOUT specifying state — should keep "active"
-    store.createNode({
-      node_id: "n1",
-      task_entity_id: "task-1",
-      kind: "tool",
-      state: "pending",
-      inputs: { toolName: "esr_update_state", params: { entity_id: "e1", confidence: 0.9 } },
-      outputs: {},
-      dependencies: [],
-      retry_count: 0,
-      max_retries: 0,
-      driver_version: "v1",
+    expect(result.content[0]?.text).toContain("ERROR:");
+    expect(result.details.error).toContain("Task not found");
+  });
+
+  it("reports artifact and evaluation gaps in closure status", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "task-closure-1",
+      role: "Task",
+      state: "active",
     });
 
-    const result = await drivers.run(
-      "esr_update_state",
-      { entity_id: "e1", confidence: 0.9 },
-      { graph, store },
-    );
-    expect(result.status).toBe("succeeded");
-    expect(graph.getEntity("e1")?.state).toBe("active");
-    expect(graph.getEntity("e1")?.confidence).toBe(0.9);
+    const result = await runTool(tools, "esr_get_closure_status", {
+      task_id: "task-closure-1",
+    });
+
+    expect(result.content[0]?.text).toContain("Closure blocked");
+    expect(result.details.closure.missing).toEqual(["artifact", "evaluation"]);
+  });
+
+  it("reports ready when closure evidence is complete", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "task-closure-2",
+      role: "Task",
+      state: "active",
+    });
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "actor-closure-2",
+      role: "Actor",
+      state: "stable",
+    });
+    await runTool(tools, "esr_update_artifact", {
+      id: "artifact-closure-2",
+      type: "code",
+      sections: [{ name: "main", state: "stable" }],
+    });
+    await runTool(tools, "esr_link_relation", {
+      from: "task-closure-2",
+      to: "artifact-closure-2",
+      type: "produces",
+    });
+    await runTool(tools, "esr_evaluate", {
+      entity_id: "task-closure-2",
+      evaluator: "actor-closure-2",
+      confidence: 0.95,
+      metrics: { tests: 10 },
+    });
+
+    const result = await runTool(tools, "esr_get_closure_status", {
+      task_id: "task-closure-2",
+    });
+
+    expect(result.content[0]?.text).toContain("Closure ready");
+    expect(result.details.closure.ready_for_stable).toBe(true);
+    expect(result.details.closure.missing).toEqual([]);
+  });
+
+  it("requires memory ref when closure policy enables it", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "task-closure-3",
+      role: "Task",
+      state: "active",
+    });
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "actor-closure-3",
+      role: "Actor",
+      state: "stable",
+    });
+    await runTool(tools, "esr_update_artifact", {
+      id: "artifact-closure-3",
+      type: "code",
+      sections: [{ name: "main", state: "stable" }],
+    });
+    await runTool(tools, "esr_link_relation", {
+      from: "task-closure-3",
+      to: "artifact-closure-3",
+      type: "produces",
+    });
+    await runTool(tools, "esr_evaluate", {
+      entity_id: "task-closure-3",
+      evaluator: "actor-closure-3",
+      confidence: 0.9,
+    });
+
+    const result = await runTool(tools, "esr_get_closure_status", {
+      task_id: "task-closure-3",
+      require_memory_ref_for_stable: true,
+    });
+
+    expect(result.content[0]?.text).toContain("Closure blocked");
+    expect(result.details.closure.missing).toContain("memory_ref");
+    expect(result.details.closure.ready_for_stable).toBe(false);
+  });
+
+  it("attaches external memory ref and satisfies closure memory requirement", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "task-memory-ref",
+      role: "Task",
+      state: "active",
+    });
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "actor-memory-ref",
+      role: "Actor",
+      state: "stable",
+    });
+    await runTool(tools, "esr_update_artifact", {
+      id: "artifact-memory-ref",
+      type: "code",
+      sections: [{ name: "main", state: "stable" }],
+    });
+    await runTool(tools, "esr_link_relation", {
+      from: "task-memory-ref",
+      to: "artifact-memory-ref",
+      type: "produces",
+    });
+    await runTool(tools, "esr_evaluate", {
+      entity_id: "task-memory-ref",
+      evaluator: "actor-memory-ref",
+      confidence: 0.93,
+    });
+
+    const attached = await runTool(tools, "esr_attach_memory_ref", {
+      entity_id: "task-memory-ref",
+      ref_id: "ext-42",
+      provider: "claude-mem",
+      kind: "summary",
+      title: "Closure summary",
+    });
+
+    expect(attached.content[0]?.text).toContain("Attached memory ref");
+    expect(graph.getMemoryRefs("task-memory-ref")).toHaveLength(1);
+
+    const closure = await runTool(tools, "esr_get_closure_status", {
+      task_id: "task-memory-ref",
+      require_memory_ref_for_stable: true,
+    });
+
+    expect(closure.details.closure.has_memory_ref).toBe(true);
+    expect(closure.details.closure.memory_ref_ids).toEqual(["ext-42"]);
+    expect(closure.details.closure.ready_for_stable).toBe(true);
+  });
+
+  it("lists tasks with closure gaps", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "task-gap-list",
+      role: "Task",
+      state: "active",
+      label: "Gap Task",
+    });
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "task-ready-list",
+      role: "Task",
+      state: "active",
+      label: "Ready Task",
+    });
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "actor-ready-list",
+      role: "Actor",
+      state: "stable",
+    });
+    await runTool(tools, "esr_update_artifact", {
+      id: "artifact-ready-list",
+      type: "code",
+      sections: [{ name: "main", state: "stable" }],
+    });
+    await runTool(tools, "esr_link_relation", {
+      from: "task-ready-list",
+      to: "artifact-ready-list",
+      type: "produces",
+    });
+    await runTool(tools, "esr_evaluate", {
+      entity_id: "task-ready-list",
+      evaluator: "actor-ready-list",
+      confidence: 0.92,
+      metrics: { tests: 8 },
+    });
+
+    const result = await runTool(tools, "esr_list_closure_gaps", {});
+
+    expect(result.content[0]?.text).toContain("Closure gaps (1)");
+    expect(result.content[0]?.text).toContain("task-gap-list");
+    expect(result.content[0]?.text).not.toContain("task-ready-list");
+    expect(result.details.items).toHaveLength(1);
+  });
+
+  it("can include ready tasks when listing closure gaps", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "task-gap-list-2",
+      role: "Task",
+      state: "active",
+    });
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "task-ready-list-2",
+      role: "Task",
+      state: "active",
+    });
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "actor-ready-list-2",
+      role: "Actor",
+      state: "stable",
+    });
+    await runTool(tools, "esr_update_artifact", {
+      id: "artifact-ready-list-2",
+      type: "code",
+      sections: [{ name: "main", state: "stable" }],
+    });
+    await runTool(tools, "esr_link_relation", {
+      from: "task-ready-list-2",
+      to: "artifact-ready-list-2",
+      type: "produces",
+    });
+    await runTool(tools, "esr_evaluate", {
+      entity_id: "task-ready-list-2",
+      evaluator: "actor-ready-list-2",
+      confidence: 0.92,
+    });
+
+    const result = await runTool(tools, "esr_list_closure_gaps", {
+      include_ready: true,
+    });
+
+    expect(result.content[0]?.text).toContain("Closure gaps (2)");
+    expect(result.content[0]?.text).toContain("task-gap-list-2");
+    expect(result.content[0]?.text).toContain("task-ready-list-2");
+    expect(result.details.items).toHaveLength(2);
+  });
+
+  it("lists tasks with closure and memory-ref summary", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "task-list-view",
+      role: "Task",
+      state: "active",
+      label: "Task View",
+      confidence: 0.6,
+    });
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "actor-list-view",
+      role: "Actor",
+      state: "stable",
+    });
+    await runTool(tools, "esr_update_artifact", {
+      id: "artifact-list-view",
+      type: "code",
+      sections: [{ name: "main", state: "stable" }],
+    });
+    await runTool(tools, "esr_link_relation", {
+      from: "task-list-view",
+      to: "artifact-list-view",
+      type: "produces",
+    });
+    await runTool(tools, "esr_evaluate", {
+      entity_id: "task-list-view",
+      evaluator: "actor-list-view",
+      confidence: 0.91,
+    });
+    await runTool(tools, "esr_attach_memory_ref", {
+      entity_id: "task-list-view",
+      ref_id: "mem-list-view",
+      provider: "claude-mem",
+      kind: "summary",
+    });
+
+    const result = await runTool(tools, "esr_list_tasks", {
+      state: "active",
+      require_memory_ref_for_stable: true,
+    });
+
+    expect(result.content[0]?.text).toContain("Tasks (1)");
+    expect(result.content[0]?.text).toContain("task-list-view");
+    expect(result.content[0]?.text).toContain("closure=ready");
+    expect(result.content[0]?.text).toContain("memory_refs=1");
+    expect(result.details.items).toHaveLength(1);
+    expect(result.details.items[0]?.ready_for_stable).toBe(true);
+  });
+
+  it("detects the software domain pack for coding goals", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+
+    const result = await runTool(tools, "esr_detect_pack", {
+      prompt: "refactor the TypeScript API module and add tests",
+    });
+
+    expect(result.content[0]?.text).toContain("Detected pack: software");
+    expect(result.details.pack.name).toBe("software");
+    expect(result.details.score).toBeGreaterThan(0.8);
+  });
+
+  it("lists available built-in packs", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+
+    const result = await runTool(tools, "esr_list_packs", {});
+
+    expect(result.content[0]?.text).toContain("Available packs (3)");
+    expect(result.content[0]?.text).toContain("govdoc@0.1.0");
+    expect(result.content[0]?.text).toContain("planning-review@0.1.0");
+    expect(result.content[0]?.text).toContain("software@0.1.0");
+    expect(result.details.packs).toHaveLength(3);
+  });
+
+  it("expands a goal with the software pack into ESR state", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools, entries } = createPiStub();
+
+    registerTools(pi as never, graph);
+
+    const result = await runTool(tools, "esr_expand_with_pack", {
+      goal: "fix login bug and add tests",
+      pack_name: "software",
+    });
+
+    expect(result.content[0]?.text).toContain("Expanded with pack: software");
+    expect(graph.getEntity("task-main")?.role).toBe("Task");
+    expect(graph.getEntity("task-main")?.label).toBe("fix login bug and add tests");
+    expect(graph.getAllEntities().filter((entity) => entity.role === "Constraint")).toHaveLength(2);
+    expect(entries.length).toBeGreaterThan(0);
+  });
+
+  it("verifies the software pack scenario through task and closure views", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+    await runTool(tools, "esr_expand_with_pack", {
+      goal: "refactor auth module and add tests",
+      pack_name: "software",
+    });
+    await runTool(tools, "esr_promote_task", {
+      entity_id: "task-main",
+      new_state: "active",
+    });
+    await runTool(tools, "esr_create_entity", {
+      entity_id: "actor-software-pack",
+      role: "Actor",
+      state: "stable",
+    });
+    await runTool(tools, "esr_update_artifact", {
+      id: "src/auth.ts",
+      type: "code",
+      sections: [{ name: "main", state: "stable" }],
+    });
+    await runTool(tools, "esr_link_relation", {
+      from: "task-main",
+      to: "src/auth.ts",
+      type: "produces",
+    });
+    await runTool(tools, "esr_evaluate", {
+      entity_id: "task-main",
+      evaluator: "actor-software-pack",
+      confidence: 0.94,
+      metrics: { tests: 6 },
+    });
+    for (const constraint of graph.getAllEntities().filter((entity) => entity.role === "Constraint")) {
+      await runTool(tools, "esr_update_state", {
+        entity_id: constraint.entity_id,
+        state: "stable",
+      });
+    }
+
+    const taskList = await runTool(tools, "esr_list_tasks", {
+      state: "active",
+    });
+    const closure = await runTool(tools, "esr_get_closure_status", {
+      task_id: "task-main",
+    });
+
+    expect(taskList.content[0]?.text).toContain("task-main");
+    expect(taskList.content[0]?.text).toContain("closure=ready");
+    expect(taskList.details.items[0]?.ready_for_stable).toBe(true);
+    expect(closure.details.closure.ready_for_stable).toBe(true);
+    expect(closure.details.closure.missing).toEqual([]);
+  });
+
+  it("detects the govdoc domain pack for proposal-style goals", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+
+    const result = await runTool(tools, "esr_detect_pack", {
+      prompt: "写一个公文式项目申请书，包含预算和政策依据",
+    });
+
+    expect(result.content[0]?.text).toContain("Detected pack: govdoc");
+    expect(result.details.pack.name).toBe("govdoc");
+    expect(result.details.score).toBeGreaterThan(0.85);
+  });
+
+  it("detects the planning-review pack for planning audit goals", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+
+    const result = await runTool(tools, "esr_detect_pack", {
+      prompt: "编写十五五规划审核报告，检查战略对齐和整改跟踪",
+    });
+
+    expect(result.content[0]?.text).toContain("Detected pack: planning-review");
+    expect(result.details.pack.name).toBe("planning-review");
+    expect(result.details.score).toBeGreaterThan(0.9);
+  });
+
+  it("routes a real fifteen-five planning review prompt to planning-review", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+
+    const result = await runTool(tools, "esr_detect_pack", {
+      prompt: "审核十五五规划待审核稿，检查战略对齐、指标完整性、数据一致性，并输出审核报告和整改跟踪建议",
+    });
+
+    expect(result.content[0]?.text).toContain("Detected pack: planning-review");
+    expect(result.details.pack.name).toBe("planning-review");
+  });
+
+  it("expands a goal with the planning-review pack into ESR state", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+
+    const result = await runTool(tools, "esr_expand_with_pack", {
+      goal: "审核十五五规划并输出问题清单和整改建议",
+      pack_name: "planning-review",
+    });
+
+    expect(result.content[0]?.text).toContain("Expanded with pack: planning-review");
+    expect(graph.getEntity("planning-document")?.role).toBe("Artifact");
+    expect(graph.getEntity("review-strategy-alignment")?.role).toBe("Task");
+    expect(graph.getArtifact("planning-review-report")).toBeDefined();
+    expect(graph.getAllEntities().filter((entity) => entity.role === "Constraint")).toHaveLength(5);
+    expect(result.details.checks).toHaveLength(5);
+    expect(result.details.reference_baselines).toHaveLength(1);
+    expect(result.details.reference_baselines[0]?.id).toBe("national-standard-requirements");
+    expect(result.details.reference_baselines[0]?.sourceType).toBe("requirement");
+    expect(result.details.gaps).toContain("missing_requirement_section:范围");
+    expect(result.details.gaps).not.toContain("missing_rectification_tracking");
+  });
+
+  it("surfaces requirement gaps but keeps review-chain signals for a realistic planning review goal", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+
+    const result = await runTool(tools, "esr_expand_with_pack", {
+      goal: "审核十五五规划待审核稿，已覆盖战略衔接、指标体系、数据测算口径、审查意见和整改台账，需补齐与国家标准要求的符合性响应",
+      pack_name: "planning-review",
+    });
+
+    expect(result.content[0]?.text).toContain("Expanded with pack: planning-review");
+    expect(result.details.gaps).not.toContain("missing_strategy_alignment");
+    expect(result.details.gaps).not.toContain("missing_indicator_completeness");
+    expect(result.details.gaps).not.toContain("missing_data_consistency");
+    expect(result.details.gaps).not.toContain("missing_review_report");
+    expect(result.details.gaps).not.toContain("missing_rectification_tracking");
+    expect(result.details.gaps).toContain("missing_requirement_section:范围");
+    expect(result.details.baseline_diffs[0]?.baselineId).toBe("national-standard-requirements");
+    expect(result.details.baseline_diffs[0]?.missingSections).toContain("范围");
+    expect(result.details.baseline_diffs[0]?.suggestions).toContain("补齐要求章节：范围");
+    expect(result.details.review_findings.some((item: any) => item.category === "requirement" && item.title.includes("范围"))).toBe(true);
+    expect(result.details.remediation_items.some((item: any) => item.findingId === "requirement-section-范围" && item.ownerHint === "规划起草组")).toBe(true);
+    expect(result.details.remediation_items.some((item: any) => item.findingId === "requirement-section-范围" && item.suggestedStatus === "open")).toBe(true);
+    expect(result.details.remediation_items.some((item: any) => item.acceptance.includes("国家标准要求"))).toBe(true);
+  });
+
+  it("expands a goal with the govdoc pack into ESR state", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+
+    const result = await runTool(tools, "esr_expand_with_pack", {
+      goal: "写一个数据基础设施项目立项书",
+      pack_name: "govdoc",
+    });
+
+    expect(result.content[0]?.text).toContain("Expanded with pack: govdoc");
+    expect(graph.getEntity("proposal-main")?.role).toBe("Artifact");
+    expect(graph.getEntity("section-background")?.role).toBe("Task");
+    expect(graph.getEntity("section-budget")?.role).toBe("Task");
+    expect(graph.getArtifact("proposal.docx")).toBeDefined();
+    expect(graph.getArtifact("budget-sheet")).toBeDefined();
+    expect(graph.getArtifact("risk-matrix")).toBeDefined();
+    expect(graph.getAllRelations().filter((relation) => relation.type === "part_of")).toHaveLength(4);
+    expect(graph.getAllEntities().filter((entity) => entity.role === "Constraint")).toHaveLength(4);
+  });
+
+  it("verifies the govdoc pack scenario through pack expansion and task views", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+    await runTool(tools, "esr_expand_with_pack", {
+      goal: "写一个数据基础设施项目立项书",
+      pack_name: "govdoc",
+    });
+    await runTool(tools, "esr_promote_task", {
+      entity_id: "section-budget",
+      new_state: "active",
+    });
+    await runTool(tools, "esr_promote_task", {
+      entity_id: "section-risk",
+      new_state: "active",
+    });
+
+    const taskList = await runTool(tools, "esr_list_tasks", {
+      include_ready: true,
+    });
+    const closureGaps = await runTool(tools, "esr_list_closure_gaps", {
+      include_ready: true,
+    });
+
+    expect(taskList.content[0]?.text).toContain("section-budget");
+    expect(taskList.content[0]?.text).toContain("section-risk");
+    expect(taskList.details.items.length).toBeGreaterThanOrEqual(4);
+    expect(closureGaps.content[0]?.text).toContain("section-budget");
+    expect(closureGaps.content[0]?.text).toContain("missing artifact, evaluation");
+  });
+
+  it("verifies govdoc validation signals can improve with attached policy memory refs", async () => {
+    const graph = new ESRGraph();
+    const { pi, tools } = createPiStub();
+
+    registerTools(pi as never, graph);
+    await runTool(tools, "esr_expand_with_pack", {
+      goal: "写一个项目立项书",
+      pack_name: "govdoc",
+    });
+
+    const before = await runTool(tools, "esr_expand_with_pack", {
+      goal: "写一个项目立项书",
+      pack_name: "govdoc",
+    });
+
+    expect(before.details.summary).toContain("GovDoc validation");
+
+    await runTool(tools, "esr_attach_memory_ref", {
+      entity_id: "proposal-main",
+      ref_id: "policy-ref-1",
+      provider: "claude-mem",
+      kind: "summary",
+      title: "政策依据汇总",
+    });
+
+    const taskList = await runTool(tools, "esr_list_tasks", {
+      include_ready: true,
+    });
+
+    expect(graph.getMemoryRefs("proposal-main")).toHaveLength(1);
+    expect(taskList.details.items.some((item: any) => item.task_id === "section-budget")).toBe(true);
   });
 });

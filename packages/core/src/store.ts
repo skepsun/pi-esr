@@ -122,6 +122,7 @@ export class MemoryStore {
 
   /** Store an observation anchored to an entity. Returns the new row id. */
   store(entityId: string, content: string, opts?: { tags?: string[]; fingerprint?: string; sessionId?: string }): number {
+    if (!entityId || !content) throw new Error("entity_id and content are required");
     const stmt = this.db.prepare(
       "INSERT INTO observations (entity_id, content, tags, fingerprint, session_id) VALUES (?, ?, ?, ?, ?)",
     );

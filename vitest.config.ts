@@ -10,6 +10,16 @@ export default defineConfig({
     },
   },
   test: {
+    include: [
+      "tests/**/*.test.ts",
+      "packages/core/tests/**/*.test.ts",
+      "packages/adapter-mcp/tests/**/*.test.ts",
+    ],
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.claude/**",
+    ],
     env: {
       PI_ESR_MEMORY_DIR: mkdtempSync(join(tmpdir(), "pi-esr-")),
     },

@@ -35,10 +35,8 @@
 ### Added
 - Initial release
 - ESRGraph core state machine with entity CRUD, typed relations, state transitions
-- 12 ESR tools: create_entity, update_state, link_relation, evaluate, score, promote_task, update_artifact, apply_constraint, get_context, remove_entity, remove_relation, create_node
-- DAG-based runtime engine: planner, executor, scheduler, cache
-- SHA256 deterministic cache keys with invalidation cascade
+- 11 ESR tools: create_entity, update_state, link_relation, evaluate, score, promote_task, update_artifact, apply_constraint, get_context, remove_entity, remove_relation
 - Prefix-cache stability (deterministic context sorting, DJB2 fingerprint)
-- Persistence layer: graph, runtime state, runtime cache
-- TUI commands: /esr, /esr-clear, /esr-step, /esr-run
+- Persistence layer: graph state
+- TUI commands: /esr, /esr-clear
 - 85 tests across 6 test files

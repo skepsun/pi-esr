@@ -1,0 +1,19 @@
+{
+  "name": "@pi-esr/domain-pack-govdoc",
+  "version": "0.3.0",
+  "description": "Government document example domain pack for pi-esr",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["esr", "domain-pack", "govdoc"]
+}

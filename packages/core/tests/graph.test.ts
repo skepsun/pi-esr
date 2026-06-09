@@ -363,6 +363,13 @@ describe("Serialization", () => {
     g1.createEntity(makeEntity("e2", { role: "Task" }));
     g1.linkRelation("e1", "e2", "depends_on");
     g1.upsertArtifact({ id: "a1", type: "report", version: 0, sections: [{ name: "s1", state: "stable" }] });
+    g1.attachMemoryRef("e2", {
+      ref_id: "mem-1",
+      provider: "claude-mem",
+      entity_id: "e2",
+      kind: "summary",
+      created_at: new Date().toISOString(),
+    });
 
     const state = g1.toPersistedState();
     const g2 = new ESRGraph();
@@ -371,6 +378,8 @@ describe("Serialization", () => {
     expect(g2.getAllEntities()).toHaveLength(3); // 2 user + 1 artifact auto-proxy
     expect(g2.getAllRelations()).toHaveLength(1);
     expect(g2.getAllArtifacts()).toHaveLength(1);
+    expect(g2.getMemoryRefs("e2")).toHaveLength(1);
+    expect(g2.getMemoryRefs("e2")[0]?.ref_id).toBe("mem-1");
   });
 
   it("clear resets everything", () => {
@@ -412,6 +421,22 @@ describe("Remove Entity", () => {
     g.removeEntity("art-1");
     expect(g.getArtifact("art-1")).toBeUndefined();
     expect(g.getAllEntities().find(e => e.entity_id === "art-1")).toBeUndefined();
+  });
+
+  it("removes attached memory refs when entity is deleted", () => {
+    const g = new ESRGraph();
+    g.createEntity(makeEntity("task-1", { role: "Task" }));
+    g.attachMemoryRef("task-1", {
+      ref_id: "mem-1",
+      provider: "claude-mem",
+      entity_id: "task-1",
+      kind: "summary",
+      created_at: new Date().toISOString(),
+    });
+
+    g.removeEntity("task-1");
+
+    expect(g.getMemoryRefs("task-1")).toEqual([]);
   });
 });
 
@@ -554,5 +579,42 @@ describe("Context Builder", () => {
     const cPos = ctx1.indexOf("c [");
     expect(aPos).toBeLessThan(bPos);
     expect(bPos).toBeLessThan(cPos);
+  });
+
+  it("neighborhood query returns only connected subgraph", () => {
+    const g = new ESRGraph();
+    g.createEntity(makeEntity("a"));
+    g.createEntity(makeEntity("b"));
+    g.createEntity(makeEntity("c"));
+    g.linkRelation("a", "b", "depends_on");
+    g.linkRelation("b", "c", "produces");
+
+    const ctx = buildESRContext(g, { entityId: "b", depth: 1 });
+    expect(ctx).toContain("a");
+    expect(ctx).toContain("c");
+    expect(ctx).toContain("(neighborhood: entity=b depth=1)");
+  });
+
+  it("neighborhood depth=0 only returns the entity itself", () => {
+    const g = new ESRGraph();
+    g.createEntity(makeEntity("a"));
+    g.createEntity(makeEntity("b"));
+    g.linkRelation("a", "b", "depends_on");
+
+    const ctx = buildESRContext(g, { entityId: "a", depth: 0 });
+    expect(ctx).toContain("a");
+    // "b" appears in "neighborhood" string — check it's not in ENTITIES list
+    expect(ctx).toContain("more entities outside neighborhood");
+  });
+
+  it("neighborhood shows remaining count when partial", () => {
+    const g = new ESRGraph();
+    g.createEntity(makeEntity("a"));
+    g.createEntity(makeEntity("b"));
+    g.createEntity(makeEntity("c"));
+    g.linkRelation("a", "b", "depends_on");
+
+    const ctx = buildESRContext(g, { entityId: "a", depth: 0 });
+    expect(ctx).toContain("more entities outside neighborhood");
   });
 });

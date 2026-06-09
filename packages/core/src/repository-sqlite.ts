@@ -100,7 +100,7 @@ function cloneEntity(entity: ESREntity, version: number, updatedBy?: string, ses
 }
 
 function emptyState(): ESRPersistedState {
-  return { version: 0, entities: [], relations: [], artifacts: [] };
+  return { version: 0, entities: [], relations: [], artifacts: [], memory_refs: [] };
 }
 
 export class SqliteESRRepository implements ESRRepository {
@@ -150,7 +150,7 @@ export class SqliteESRRepository implements ESRRepository {
 
       const currentState: ESRPersistedState = row
         ? JSON.parse(row.state_json)
-        : { version: 0, entities: [], relations: [], artifacts: [] };
+        : { version: 0, entities: [], relations: [], artifacts: [], memory_refs: [] };
       const expectedGV = row?.graph_version ?? 0;
 
       // Read the target entity's current version from the LATEST state

@@ -12,8 +12,8 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { ESRGraph } from "@pi-esr/core";
-import type { ESRPersistedState } from "@pi-esr/core";
+import { ESRGraph } from "../core";
+import type { ESRPersistedState } from "../core";
 import { writeFileSync, readFileSync, existsSync, readdirSync, statSync, createReadStream } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -38,7 +38,8 @@ function isPersistedState(data: unknown): data is ESRPersistedState {
     typeof d.version === "number" &&
     Array.isArray(d.entities) &&
     Array.isArray(d.relations) &&
-    Array.isArray(d.artifacts)
+    Array.isArray(d.artifacts) &&
+    (d.memory_refs === undefined || Array.isArray(d.memory_refs))
   );
 }
 
@@ -92,7 +93,7 @@ export async function loadGraphState(ctx: ExtensionContext, graph: ESRGraph): Pr
 
 export function clearGraphState(pi: ExtensionAPI): void {
   try {
-    const empty = { version: 0, entities: [], relations: [], artifacts: [] };
+    const empty = { version: 0, entities: [], relations: [], artifacts: [], memory_refs: [] };
     pi.appendEntry("esr-state", empty);
     writeFileSync(getFilePath(), JSON.stringify(empty, null, 2), { flag: "w" });
   } catch { /* ignore */ }

@@ -6,32 +6,47 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { MemoryStore } from "../packages/core/src/store.js";
 import {
   ESRGraph,
-  ESRRuntime,
-  ESRRuntimeStateStore,
-  ToolDriverRegistry,
-  InMemoryCacheStore,
   setCurrentSessionId,
   getCurrentSessionId,
-} from "@pi-esr/core";
-import type { MemoryStore } from "@pi-esr/core";
+} from "./core";
+import {
+  createMemoryProvider,
+  detectMemoryCapabilities,
+  type ESRMemoryProvider,
+  selectMemoryProvider,
+  SqliteMemoryProvider,
+} from "./memory-bridge";
 import { registerCommands, setMemoryStoreForCommands } from "./integration/commands";
 import { registerTools } from "./integration/tools";
 import { reconstructGraph } from "./persistence/reconstruct";
-import { persistRuntimeCache } from "./persistence/runtime-cache";
-import { persistRuntimeState } from "./persistence/runtime-state";
-import { reconstructRuntimeState } from "./persistence/runtime-state";
-import { reconstructRuntimeCache } from "./persistence/runtime-cache";
 import { buildStaticPrompt } from "./prompt";
 
 async function getMemoryStore(): Promise<MemoryStore | null> {
   try {
-    const { MemoryStore: Store } = await import("@pi-esr/core");
+    const { MemoryStore: Store } = await import("../packages/core/src/store.js");
     return new Store();
   } catch {
     return null;
   }
+}
+
+async function getMemoryProvider(): Promise<ESRMemoryProvider> {
+  const report = detectMemoryCapabilities({
+    cwd: process.cwd(),
+    env: process.env,
+    packageJson: readRootPackageJson(),
+    hostHints: ["pi"],
+  });
+  const store = await getMemoryStore();
+  return createMemoryProvider({
+    report,
+    sqliteStore: store,
+  });
 }
 
 function captureSessionId(ctx: ExtensionContext): void {
@@ -42,30 +57,45 @@ function captureSessionId(ctx: ExtensionContext): void {
   }
 }
 
+function readRootPackageJson(): {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+} | undefined {
+  try {
+    const raw = readFileSync(join(process.cwd(), "package.json"), "utf-8");
+    return JSON.parse(raw) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 export default function (pi: ExtensionAPI) {
   const graph = new ESRGraph();
-  const runtimeStore = new ESRRuntimeStateStore();
-  const toolDriverRegistry = new ToolDriverRegistry();
-  const runtimeCache = new InMemoryCacheStore();
-  const runtime = new ESRRuntime(graph, runtimeStore, toolDriverRegistry, runtimeCache, () => {
-    persistRuntimeState(pi, runtimeStore);
-    persistRuntimeCache(pi, runtimeCache);
+  const memoryReport = detectMemoryCapabilities({
+    cwd: process.cwd(),
+    env: process.env,
+    packageJson: readRootPackageJson(),
+    hostHints: ["pi"],
   });
+  const selectedMemoryProvider = selectMemoryProvider(memoryReport);
+
+  console.error(
+    `[pi-esr] Memory capability: status=${memoryReport.status} confidence=${memoryReport.confidence.toFixed(2)} kinds=${memoryReport.kinds.join(",") || "none"} provider=${selectedMemoryProvider}`,
+  );
 
   // ── Event handlers ────────────────────────────────────
 
   pi.on("session_start", async (_event, ctx: ExtensionContext) => {
     captureSessionId(ctx);
     await reconstructGraph(ctx, graph);
-    reconstructRuntimeState(ctx, runtimeStore);
-    reconstructRuntimeCache(ctx, runtimeCache);
   });
 
   pi.on("session_tree", async (_event, ctx: ExtensionContext) => {
     captureSessionId(ctx);
     await reconstructGraph(ctx, graph);
-    reconstructRuntimeState(ctx, runtimeStore);
-    reconstructRuntimeCache(ctx, runtimeCache);
   });
 
   pi.on("before_agent_start", async (event, _ctx) => {
@@ -78,14 +108,15 @@ export default function (pi: ExtensionAPI) {
 
   // ── Tools & commands ──────────────────────────────────
 
-  registerTools(pi, graph, runtimeStore, toolDriverRegistry, runtime);
-  registerCommands(pi, graph, runtime, runtimeStore);
+  registerTools(pi, graph);
+  registerCommands(pi, graph);
 
   // ── Auto-journal (memory) ─────────────────────────────
 
-  getMemoryStore().then(async (mem) => {
-    setMemoryStoreForCommands(mem);
-    if (!mem) return;
+  getMemoryProvider().then(async (provider) => {
+    setMemoryStoreForCommands(provider);
+    if (!(provider instanceof SqliteMemoryProvider)) return;
+    const mem = provider.getStore();
     try {
       graph.setStateChangeHook((entityId, oldState, newState, label) => {
         const transition = `${oldState} → ${newState}`;
@@ -115,7 +146,7 @@ export default function (pi: ExtensionAPI) {
       });
 
       const { registerMemoryTools } = await import("./memory/tools");
-      registerMemoryTools(pi, mem);
+      registerMemoryTools(pi, provider);
     } catch (err) {
       console.error("[pi-esr] Memory layer init failed:", err);
     }

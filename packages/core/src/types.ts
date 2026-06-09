@@ -44,11 +44,22 @@ export interface ESRArtifactSection {
   state: SectionState;
 }
 
+export interface ESRMemoryRefSummary {
+  ref_id: string;
+  provider: string;
+  entity_id: string;
+  kind: "summary" | "decision" | "incident" | "note";
+  title?: string;
+  created_at: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface ESRPersistedState {
   version: number;
   entities: ESREntity[];
   relations: ESRRelation[];
   artifacts: ESRArtifact[];
+  memory_refs: ESRMemoryRefSummary[];
 }
 
 export type Result<T = void> = { ok: true; value?: T } | { ok: false; error: string };

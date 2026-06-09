@@ -3,7 +3,7 @@ name: esr
 description: >
   Engineering State Runtime — structured task tracking and state management. Use when: starting any
   non-trivial coding task, tracking multi-step work, making architectural decisions, coordinating
-  across multiple files/modules, running DAG workflows, or when you need to preserve context across
+  across multiple files/modules, or when you need to preserve context across
   sessions. Triggers: "track this task", "create a plan", "run the workflow", "check ESR state",
   "what's the status", "promote to stable", any mention of entities/relations/state/esr.
 ---
@@ -11,6 +11,12 @@ description: >
 # ESR (Engineering State Runtime)
 
 ESR is a structured state management layer for coding agents. Think of it as **Git for your agent's decision-making**: every decision is an entity, every relationship is typed, every outcome is scored, and all context persists across sessions.
+
+In this repo, ESR has also been extended with:
+
+- `memory-bridge` for host memory capability detection and provider selection
+- `domain packs` for domain-specific structure compilation
+- `pack registry` for lightweight pack discovery
 
 ## Core Concepts
 
@@ -49,7 +55,7 @@ Tasks are the primary entities you promote through this lifecycle.
 
 ```
 1. esr_get_context        — Load current graph state. Returns full state + revision number.
-2. esr_mem_recall         — Check what happened last session
+2. esr_mem_recall         — Check what happened last session when memory is available
 ```
 
 **Subsequent state checks:**
@@ -73,49 +79,56 @@ esr_get_context(since_revision=N)   — Pass the revision from your last call.
 6. esr_update_artifact    — For EVERY file produced or modified
 7. esr_link_relation      — Task --[produces]--> Artifact
 8. esr_evaluate           — With objective metrics (test_count, typecheck_errors, lines_changed...)
-9. esr_mem_store          — Summary: what was done, why, caveats
-10. esr_promote_task      — active → stable
+9. esr_get_closure_status — Check missing evidence before promotion
+10. esr_mem_store         — Optional summary when memory is available
+11. esr_promote_task      — active → stable only after closure is ready
 ```
 
 **For multi-task initiatives:**
 
 ```
-11. esr_create_entity     — Concept entity to group tasks
-12. esr_link_relation     — Each task --[part_of]--> Concept
-13. esr_create_entity     — Actor entity (who did the work)
-14. esr_link_relation     — Actor --[evaluates]--> each task
-15. esr_apply_constraint  — Quality gates (e.g. "typecheck: 0 errors")
+12. esr_create_entity     — Concept entity to group tasks
+13. esr_link_relation     — Each task --[part_of]--> Concept
+14. esr_create_entity     — Actor entity (who did the work)
+15. esr_link_relation     — Actor --[evaluates]--> each task
+16. esr_apply_constraint  — Quality gates (e.g. "typecheck: 0 errors")
 ```
-
-## DAG Execution
-
-For multi-step automated workflows:
-
-```
-esr_create_node     — Declare each step with dependencies
-esr_create_node     — Next step, depends on previous
-esr_run             — Execute the DAG (zero-token, runtime handles ordering/parallelism)
-```
-
-Always call `esr_run` after declaring all nodes.
 
 ## Memory Layer
 
-ESR includes persistent memory anchored to entities:
+ESR can integrate with an optional persistent memory layer:
 
-- `esr_mem_store` — Record observations (auto-tagged with session ID)
+- `esr_mem_store` — Record observations when a memory provider is available
 - `esr_mem_recall` — Search by entity or text
 - `esr_mem_timeline` — Chronological history of an entity
 - `esr_mem_journal` — State transition audit trail
 
 State changes are auto-journaled: every `draft→active`, `active→stable` transition is recorded.
 
+When the host already has its own memory system, prefer attaching `memory_ref` instead of duplicating full memory content into ESR. ESR should remain the structured state layer, not become a second full-text memory store.
+
+## Domain Packs
+
+When a task is clearly domain-shaped rather than generic coding work, prefer pack-aware flow:
+
+1. `esr_list_packs` — inspect available packs
+2. `esr_detect_pack` — detect the best pack for the prompt
+3. `esr_expand_with_pack` — expand into ESR entities, constraints, artifacts, and validation gaps
+
+Current built-in packs:
+
+- `software`
+- `govdoc`
+- `planning-review`
+
+Use them to keep ESR Core generic while still supporting real enterprise scenarios.
+
 ## Golden Rules
 
 1. **Everything meaningful → Entity** — tasks, files, decisions, concepts, constraints
 2. **All structure → Relation** — connect entities with typed relations
 3. **State is the only truth** — track everything through `draft→active→stable`
-4. **Closure is mandatory** — every task reaching `stable` MUST produce artifact + evaluation + memory
+4. **Closure is mandatory** — every task reaching `stable` MUST produce artifact + evaluation, and should pass `esr_get_closure_status`
 5. **Don't store noise** — if it can't be represented in the ontology or won't affect future decisions, don't store it
 
 ## Common Patterns
@@ -126,7 +139,8 @@ esr_create_entity t1 Task "fix-login-bug"        → esr_promote_task t1 active
 ... do the work ...
 esr_update_artifact a1 code {file: "src/auth.ts"} → esr_link_relation t1 produces a1
 esr_evaluate t1 by-evaluator claude-code {test_count: 3, typecheck_errors: 0}
-esr_mem_store t1 "Fixed null pointer in login handler, added 3 tests"
+esr_get_closure_status t1
+esr_mem_store t1 "Fixed null pointer in login handler, added 3 tests"   (optional)
 esr_promote_task t1 stable
 ```
 
@@ -160,11 +174,10 @@ esr_get_context(since_revision=42)                 → Check if anything changed
 | `esr_promote_task` | Advance draft→active or active→stable |
 | `esr_update_artifact` | Record produced/modified files |
 | `esr_apply_constraint` | Add quality gates |
-| `esr_create_node` | Declare DAG execution steps |
-| `esr_run` | Execute declared DAG |
+| `esr_get_closure_status` | Check whether a task is ready for stable |
 | `esr_remove_entity` | Clean up irrelevant entities |
 | `esr_remove_relation` | Remove invalid connections |
-| `esr_mem_store` | Save observations for later recall |
+| `esr_mem_store` | Save observations for later recall when memory is available |
 | `esr_mem_recall` | Search past observations |
 | `esr_mem_timeline` | Audit entity history |
 | `esr_mem_journal` | View/record state transitions |

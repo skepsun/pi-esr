@@ -7,49 +7,84 @@
  *
  * Or with Cursor / any MCP-compatible client via stdio transport.
  *
- * Registers 17 ESR tools + `esr://context` resource.
- * Persists state to `.esr-snapshot.json` on every mutation.
+ * Registers 15 ESR tools + `esr://context` resource.
+ * Persists state to `.pi-esr-memory/esr-state.json` on every mutation.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { MemoryStore } from "../../core/src/store.js";
+import {
+  createMemoryProvider,
+  detectMemoryCapabilities,
+  type ESRMemoryProvider,
+  NullMemoryProvider,
+  selectMemoryProvider,
+  SqliteMemoryProvider,
+} from "../../memory-bridge/src/index.js";
 import {
   ESRGraph,
-  ESRRuntimeStateStore,
-  ToolDriverRegistry,
-  MemoryStore,
   SqliteESRRepository,
 } from "@pi-esr/core";
 import { TOOLS, init, isMutation, getContextText } from "./tools";
 import { load, persist } from "./persistence";
 
+function readRootPackageJson(): {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+} | undefined {
+  try {
+    const raw = readFileSync(join(process.cwd(), "package.json"), "utf-8");
+    return JSON.parse(raw) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 // ── Bootstrap ───────────────────────────────────────────
 
 const graph = new ESRGraph();
-const runtimeStore = new ESRRuntimeStateStore();
-const toolDrivers = new ToolDriverRegistry();
+const memoryReport = detectMemoryCapabilities({
+  cwd: process.cwd(),
+  env: process.env,
+  packageJson: readRootPackageJson(),
+  hostHints: ["mcp"],
+});
+const selectedMemoryProvider = selectMemoryProvider(memoryReport);
 
 const prior = load();
 if (prior) graph.loadFromState(prior);
 const repository = new SqliteESRRepository(undefined, prior ?? undefined);
 
-let memory: MemoryStore | null = null;
+let memory: ESRMemoryProvider = new NullMemoryProvider();
 try {
-  memory = new MemoryStore();
+  memory = createMemoryProvider({
+    report: memoryReport,
+    sqliteStore: new MemoryStore(),
+  });
 } catch {
-  // better-sqlite3 not installed — memory tools report errors gracefully
+  memory = createMemoryProvider({
+    report: memoryReport,
+    sqliteStore: null,
+  });
 }
 
-init(graph, runtimeStore, toolDrivers, memory, repository);
+init(graph, memory, repository);
 
 // ── State change hook → auto-journal ────────────────────
 
 graph.setStateChangeHook((entityId, oldState, newState, label) => {
-  if (memory) {
+  if (memory instanceof SqliteMemoryProvider) {
+    const store = memory.getStore();
     const transition = `${oldState} → ${newState}`;
-    memory.journal(entityId, transition);
+    store.journal(entityId, transition);
     const desc = label ? ` ${label}` : "";
-    memory.store(entityId, `${transition}${desc}`, {
+    store.store(entityId, `${transition}${desc}`, {
       tags: ["state-transition", `from:${oldState}`, `to:${newState}`],
     });
   }
@@ -152,27 +187,29 @@ Artifacts are structured objects (document, code, report, spec) with versioned s
 
 ## Task Completion Protocol (MANDATORY)
 
-When you promote a task to stable or complete significant work on any entity, you MUST execute the following closure sequence.
+When you promote a task to stable, you MUST execute the following closure sequence.
 
 ### For every task reaching stable:
 
 1. **Create Artifact** — use esr_update_artifact for every file produced or modified
 2. **Link produces** — esr_link_relation: task --[produces]--> artifact
 3. **Record Evaluation** — esr_evaluate with objective metrics
-4. **Store Memory** — esr_mem_store summarizing what was done, why, and any caveats
-5. **Group under Concept** — if multiple tasks belong to a larger initiative, create a Concept and link each task via part_of
+4. **Check Closure** — use esr_get_closure_status before promoting to stable
+5. **Store Memory (optional)** — if a memory provider is available, use esr_mem_store summarizing what was done, why, and any caveats
+6. **Group under Concept** — if multiple tasks belong to a larger initiative, create a Concept and link each task via part_of
 
 ### For every group of related tasks:
 
-6. **Create Actor** — who executed these tasks
-7. **Link evaluates** — Actor --[evaluates]--> each task with confidence and metrics
-8. **Apply Constraint** — esr_apply_constraint for quality gates
+7. **Create Actor** — who executed these tasks
+8. **Link evaluates** — Actor --[evaluates]--> each task with confidence and metrics
+9. **Apply Constraint** — esr_apply_constraint for quality gates
 
 ### Verification checklist:
 - Task entity exists with state=stable
 - At least one artifact linked via produces
 - Evaluation recorded with concrete metrics
-- Memory observation stored summarizing the work
+- `esr_get_closure_status` reports ready_for_stable=true before promotion
+- Memory observation stored summarizing the work when memory is available
 - If part of a group: Concept + Actor + part_of relations present
 
 ## Usage
@@ -204,30 +241,32 @@ const transport = new StdioServerTransport();
 await server.connect(transport);
 
 const toolCount = Object.keys(TOOLS).length;
-console.error(`[pi-esr-mcp] Started with ${toolCount} tools${memory ? " + memory" : ""}`);
+console.error(`[pi-esr-mcp] Started with ${toolCount} tools${memory instanceof SqliteMemoryProvider ? " + memory" : ""}`);
 console.error(`[pi-esr-mcp] Snapshot: ${prior ? "loaded" : "fresh"}`);
+console.error(
+  `[pi-esr-mcp] Memory capability: status=${memoryReport.status} confidence=${memoryReport.confidence.toFixed(2)} kinds=${memoryReport.kinds.join(",") || "none"} provider=${selectedMemoryProvider}`,
+);
 
 // ── Helpers ─────────────────────────────────────────────
 
 function toolNameToDescription(name: string): string {
   const descriptions: Record<string, string> = {
-    esr_create_entity: "Create a new entity. Role MUST be: Actor (agent/system), Artifact (code/doc/report/spec), Task (draft→active→stable lifecycle), Concept (grouping), or Constraint (quality gate). Load current state via esr_get_context first, then create entities and link them via esr_link_relation.",
-    esr_update_state: "Update entity state (active|stable|draft|blocked|deprecated), confidence 0-1, or metrics. When setting a Task to stable, follow closure protocol: esr_update_artifact + esr_evaluate + esr_mem_store.",
-    esr_link_relation: "Create typed relation. Structural: depends_on/part_of/implements. Semantic: supports/contradicts/refines. Evaluation: evaluates/scores/validates. Operational: triggers/updates/blocks/produces. Everything meaningful is connected via relations.",
-    esr_evaluate: "Record evaluation with confidence 0-1 and numeric metrics (test_count, typecheck_errors, lines_changed, etc.). Required for every Task promoted to stable. Scores are objective, not free text.",
-    esr_score: "Attach numeric score to entity (quality=0.9, coverage=85). For full evaluations with confidence, use esr_evaluate instead.",
-    esr_promote_task: "Advance Task: draft→active (work starts)→stable (complete). Stable REQUIRES: esr_update_artifact for produced files, esr_link_relation --[produces]-->, esr_evaluate with metrics, esr_mem_store observation. Optionally group under Concept via part_of.",
-    esr_update_artifact: "Create/update artifact (document|code|report|spec) with versioned sections (draft|editing|stable|invalid). Every Task reaching stable MUST produce at least one artifact.",
-    esr_apply_constraint: "Apply quality gate (e.g. 'all tests pass before stable', 'code review required'). Constraints block transitions until satisfied.",
-    esr_get_context: "Query current ESR graph state. ALWAYS call first when starting. Returns full state + revision number. Pass since_revision=N to skip unchanged state (10 tokens vs 500). ESR state is NOT pre-injected.",
-    esr_remove_entity: "Remove entity and cascade-delete relations. Irreversible. Use when entity no longer affects future decisions.",
-    esr_remove_relation: "Remove specific typed relation. Use when connection is invalid (e.g. dependency removed).",
-    esr_create_node: "Create DAG runtime node linked to a Task entity. Has dependencies, tool+inputs payload. After declaring all nodes, call esr_run to execute.",
-    esr_run: "Execute all pending runtime nodes in dependency order (zero-token dispatch). ALWAYS call after declaring DAG with esr_create_node. Runtime handles ordering, caching, parallel dispatch. Failure blocks dependents.",
-    esr_mem_store: "Store observation anchored to ESR entity. Persists across sessions. Use after completing task work to capture what was done, why, caveats.",
-    esr_mem_recall: "Recall memories by entity_id, text search, or both. Use before decisions to check entity history.",
-    esr_mem_timeline: "Chronological timeline for entity. Audit state changes, evaluations, related work over time.",
-    esr_mem_journal: "View/record entity state transition journal. Auto-journaled: draft→active→stable. Use view to audit, record for notes.",
+    esr_create_entity: "Create entity (Actor/Artifact/Task/Concept/Constraint). Load state first via esr_get_context.",
+    esr_update_state: "Update entity state, confidence 0-1, or metrics.",
+    esr_link_relation: "Create typed relation between entities.",
+    esr_evaluate: "Record evaluation with confidence 0-1 and numeric metrics.",
+    esr_score: "Attach numeric score to entity.",
+    esr_promote_task: "Advance Task: draft→active→stable. See closure protocol.",
+    esr_update_artifact: "Create/update artifact with versioned sections.",
+    esr_apply_constraint: "Apply quality gate constraint to entity.",
+    esr_get_context: "Query ESR graph state. Call first. Pass since_revision=N to skip unchanged.",
+    esr_get_closure_status: "Inspect whether a task has enough evidence to be promoted to stable.",
+    esr_remove_entity: "Remove entity, cascade-delete relations.",
+    esr_remove_relation: "Remove typed relation between entities.",
+    esr_mem_store: "Store observation anchored to entity.",
+    esr_mem_recall: "Recall memories by entity or text search.",
+    esr_mem_timeline: "Chronological timeline for entity.",
+    esr_mem_journal: "View/record state transition journal.",
   };
   return descriptions[name] ?? name;
 }

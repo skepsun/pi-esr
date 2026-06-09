@@ -4,7 +4,7 @@
 
 import type {
   ESREntity, ESRRelation, ESRArtifact, ESRPersistedState,
-  EntityState, RelationType,
+  EntityState, RelationType, ESRMemoryRefSummary,
 } from "./types.js";
 import {
   validateRole, validateState, validateRelationType,
@@ -26,6 +26,7 @@ export class ESRGraph {
   private entities = new Map<string, ESREntity>();
   private relations: ESRRelation[] = [];
   private artifacts = new Map<string, ESRArtifact>();
+  private memoryRefs = new Map<string, ESRMemoryRefSummary[]>();
   private version = 0;
 
   /** Callback: (entityId, oldState, newState, label?) — set by index.ts for auto-journal. */
@@ -104,6 +105,28 @@ export class ESRGraph {
     return Array.from(this.entities.values());
   }
 
+  attachMemoryRef(entityId: string, ref: ESRMemoryRefSummary): { ok: true } | { ok: false; error: string } {
+    if (!this.entities.has(entityId)) return { ok: false, error: `Entity not found: ${entityId}` };
+    if (ref.entity_id !== entityId) return { ok: false, error: `Memory ref entity mismatch: expected ${entityId}, got ${ref.entity_id}` };
+
+    const current = this.memoryRefs.get(entityId) ?? [];
+    if (current.some((item) => item.ref_id === ref.ref_id && item.provider === ref.provider)) {
+      return { ok: false, error: `Memory ref already attached: ${ref.provider}:${ref.ref_id}` };
+    }
+
+    this.memoryRefs.set(entityId, [...current, cloneMemoryRef(ref)]);
+    this.version++;
+    return { ok: true };
+  }
+
+  getMemoryRefs(entityId: string): ESRMemoryRefSummary[] {
+    return (this.memoryRefs.get(entityId) ?? []).map(cloneMemoryRef);
+  }
+
+  getAllMemoryRefs(): ESRMemoryRefSummary[] {
+    return Array.from(this.memoryRefs.values()).flat().map(cloneMemoryRef);
+  }
+
   /**
    * Create a typed relation between two entities.
    * Structural edges (depends_on, part_of, implements, triggers)
@@ -167,6 +190,46 @@ export class ESRGraph {
   /** Return all relations of a specific type. */
   getRelationsByType(type: RelationType): ESRRelation[] {
     return this.relations.filter(r => r.type === type);
+  }
+
+  /**
+   * Return the neighborhood subgraph centered on entityId within `depth` hops.
+   * BFS outward along all relation directions, collecting entities and relations.
+   */
+  getNeighborhood(entityId: string, depth: number): { entities: ESREntity[]; relations: ESRRelation[] } {
+    const entitySet = new Set<string>();
+    const relationSet: ESRRelation[] = [];
+    const root = this.entities.get(entityId);
+    if (!root) return { entities: [], relations: [] };
+
+    entitySet.add(entityId);
+    let frontier = new Set<string>([entityId]);
+
+    for (let d = 0; d < depth; d++) {
+      const next = new Set<string>();
+      for (const eid of frontier) {
+        for (const r of this.relations) {
+          if (r.from === eid && !entitySet.has(r.to)) {
+            entitySet.add(r.to); next.add(r.to); relationSet.push(r);
+          }
+          if (r.to === eid && !entitySet.has(r.from)) {
+            entitySet.add(r.from); next.add(r.from); relationSet.push(r);
+          }
+        }
+      }
+      frontier = next;
+      if (frontier.size === 0) break;
+    }
+
+    // Include relations between entities already in the neighborhood
+    for (const r of this.relations) {
+      if (entitySet.has(r.from) && entitySet.has(r.to) && !relationSet.includes(r)) {
+        relationSet.push(r);
+      }
+    }
+
+    const entities = Array.from(entitySet).map(id => this.entities.get(id)!);
+    return { entities, relations: relationSet };
   }
 
   /** Upsert an artifact. Auto-increments version when omitted.
@@ -301,6 +364,7 @@ export class ESRGraph {
       entities: this.getAllEntities(),
       relations: this.getAllRelations(),
       artifacts: this.getAllArtifacts(),
+      memory_refs: this.getAllMemoryRefs(),
     };
   }
 
@@ -309,9 +373,15 @@ export class ESRGraph {
     this.entities.clear();
     this.relations = [];
     this.artifacts.clear();
+    this.memoryRefs.clear();
     for (const e of state.entities) this.entities.set(e.entity_id, e);
     this.relations = [...state.relations];
     for (const a of state.artifacts) this.artifacts.set(a.id, a);
+    for (const ref of state.memory_refs ?? []) {
+      const current = this.memoryRefs.get(ref.entity_id) ?? [];
+      current.push(cloneMemoryRef(ref));
+      this.memoryRefs.set(ref.entity_id, current);
+    }
     this.version = state.version;
   }
 
@@ -322,6 +392,7 @@ export class ESRGraph {
     this.entities.delete(id);
     this.relations = this.relations.filter(r => r.from !== id && r.to !== id);
     this.artifacts.delete(id);
+    this.memoryRefs.delete(id);
     this.version++;
     return { ok: true };
   }
@@ -331,6 +402,14 @@ export class ESRGraph {
     this.entities.clear();
     this.relations = [];
     this.artifacts.clear();
+    this.memoryRefs.clear();
     this.version = 0;
   }
+}
+
+function cloneMemoryRef(ref: ESRMemoryRefSummary): ESRMemoryRefSummary {
+  return {
+    ...ref,
+    metadata: ref.metadata ? { ...ref.metadata } : undefined,
+  };
 }

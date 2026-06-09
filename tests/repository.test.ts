@@ -17,7 +17,7 @@ function makeEntity(id: string, state = "draft", confidence = 0) {
 }
 
 function makeState(entities = [makeEntity("task-1")]): ESRPersistedState {
-  return { version: 1, entities, relations: [], artifacts: [] };
+  return { version: 1, entities, relations: [], artifacts: [], memory_refs: [] };
 }
 
 let tmpDir: string;
@@ -79,6 +79,7 @@ describe("SqliteESRRepository", () => {
       entities: [makeEntity("a"), makeEntity("b")],
       relations: [],
       artifacts: [],
+      memory_refs: [],
     };
     const repo = tempRepo(initialState);
 
@@ -100,6 +101,7 @@ describe("SqliteESRRepository", () => {
       entities: [makeEntity("task-1")],
       relations: [],
       artifacts: [],
+      memory_refs: [],
     };
 
     // Both repos created from the same initial state

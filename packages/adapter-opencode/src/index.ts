@@ -4,7 +4,9 @@
  * OpenCode natively supports MCP servers via its configuration.
  * This adapter generates the MCP config for the ESR MCP server.
  */
-import { buildESRContext, ESRGraph, MemoryStore, buildActiveMemoryContext } from "@pi-esr/core";
+import { buildESRContext, ESRGraph } from "@pi-esr/core";
+import { buildActiveMemoryContext } from "../../core/src/recall.js";
+import { MemoryStore } from "../../core/src/store.js";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname, resolve, parse } from "node:path";
 

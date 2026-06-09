@@ -15,7 +15,7 @@ npm install -g pi-esr
 pi-esr setup
 ```
 
-That's it — 17 ESR tools (13 graph/runtime + 4 memory) are now available.
+That's it — ESR graph tools, closure tools, pack tools, and optional memory tools are now available.
 
 ### MCP Clients (Claude Code, Codex, Cursor)
 
@@ -35,7 +35,7 @@ If you prefer manual setup, the MCP server still exposes `esr-system-prompt` via
 
 ```bash
 git clone https://github.com/skepsun/pi-esr.git && cd pi-esr && npm install
-npm test                    # 132 tests
+npm test                    # 111 tests
 npm run typecheck           # Zero errors
 ```
 
@@ -47,7 +47,14 @@ pi-esr transforms user requests into structured entities, typed relations, expli
 - **Document processing** – entities = sections/artifacts/requirements, relations = supports/refines/contradicts
 - **Expert evaluation** – entities = experts/evaluations/tasks, relations = evaluates/scores/validates
 - **Scoring / decision support** – numeric metrics attached to entities
-- **Runtime execution** – DAG-based task orchestration with cache-hit optimization
+- **Cross-session continuity** – graph state persists across sessions and projects
+
+The architecture now has four intentionally separate layers:
+
+- `ESR Core` – the single source of truth for entities, relations, tasks, artifacts, constraints, and closure
+- `Memory Bridge` – detects host memory capabilities and selects a compatible provider
+- `Domain Pack` – compiles domain semantics into ESR structures without owning state
+- `Pack Registry` – a lightweight built-in pack market for discovery and selection
 
 ## ESR Tools
 
@@ -62,11 +69,15 @@ pi-esr transforms user requests into structured entities, typed relations, expli
 | `esr_update_artifact` | Create/update structured artifact with sections |
 | `esr_apply_constraint` | Apply a constraint to an entity |
 | `esr_get_context` | Query the current ESR graph state |
+| `esr_get_closure_status` | Check whether a task has enough evidence to move to stable |
+| `esr_list_closure_gaps` | List missing closure evidence for tasks |
+| `esr_list_tasks` | View task state with closure-oriented summaries |
 | `esr_remove_entity` | Remove an entity and cascade-delete all its relations |
 | `esr_remove_relation` | Remove a specific relation between two entities |
-| `esr_create_node` | Create a runtime execution node for the DAG engine |
-| `esr_run` | Execute all pending runtime nodes until idle (zero-token DAG dispatch) |
-
+| `esr_attach_memory_ref` | Attach an external memory reference without duplicating full content |
+| `esr_list_packs` | List available domain packs |
+| `esr_detect_pack` | Detect the best-matching domain pack |
+| `esr_expand_with_pack` | Expand a request into ESR entities, constraints, artifacts, and validation |
 ### Memory Tools (optional — requires `better-sqlite3`)
 
 | Tool | Description |
@@ -76,14 +87,58 @@ pi-esr transforms user requests into structured entities, typed relations, expli
 | `esr_mem_timeline` | Chronological timeline of all observations about an entity |
 | `esr_mem_journal` | View entity state transition journal or record manual entry |
 
+## Memory Compatibility
+
+pi-esr does not assume the host runtime has no memory, and it does not try to replace a mature memory system.
+
+- If the host already exposes memory capabilities, `memory-bridge` detects them and ESR cooperates through `memory_ref`
+- If the host has no usable memory layer, ESR can fall back to a SQLite provider or a null provider
+- ESR itself stores only decision-relevant structured state rather than duplicating full external memory content
+
+This keeps ESR compatible with:
+
+- agent runtimes with built-in state or memory
+- retrieval-oriented memory plugins
+- summary-oriented memory plugins
+- lightweight hosts with no memory support
+
+The point of auto-detection is to avoid competing state systems, not to declare one memory implementation superior.
+
+## Domain Packs
+
+pi-esr now supports a lightweight domain-pack model:
+
+- `software` – software delivery and engineering closure
+- `govdoc` – public-sector and enterprise documents, proposals, policy references, budget/risk sections
+- `planning-review` – strategic planning review, indicator coverage, consistency checks, rectification closure
+
+The boundaries are strict:
+
+- `ESR` does not understand domain semantics
+- `Pack` does not persist state
+- `Adapter` only performs structural mapping
+- `Registry` only handles discovery and selection
+
+This allows domain growth without turning ESR itself into a domain framework.
+
+## Real Enterprise Scenarios
+
+Two non-software scenarios have already been calibrated against real enterprise materials:
+
+- `planning-review`
+  - for 15th Five-Year planning review, strategy alignment, indicator completeness, text/data consistency, and rectification tracking
+  - supports requirement-source modeling so national standards or normative documents can be attached as review criteria
+- `govdoc`
+  - for official writing, project proposals, budget sections, policy references, and risk-section completeness
+
+All of this enters the system through `Pack -> ESR` compilation rather than hard-coded core semantics.
+
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `/esr` | Display ESR graph + runtime nodes |
+| `/esr` | Display the current ESR graph |
 | `/esr-clear` | Clear all ESR state |
-| `/esr-step` | Run one runtime tick |
-| `/esr-run [maxSteps]` | Run runtime until idle |
 
 ## Guardrails
 
@@ -107,15 +162,13 @@ ESR is designed for DeepSeek-style prefix caching. Three invariants ensure byte-
 
 The system prompt also includes **Cache Stability Rules** that forbid the LLM from rearranging, paraphrasing, or annotating the ESR context block.
 
-## Runtime Engine
+## Persistence Model
 
-ESR includes a DAG-based execution engine for orchestrating multi-step tool workflows:
+ESR persists graph state in two places:
 
-- **Execution nodes** — `pending → ready → running → succeeded/failed/blocked/cached`
-- **Dependency planning** — `computeRunnableNodes` evaluates DAG readiness
-- **SHA256 cache keys** — deterministic keys include inputs + dependency fingerprints + artifact versions
-- **Invalidation cascade** — graph mutations mark dependent runtime nodes stale
-- **Tool driver abstraction** — runtime tool dispatch is independent of pi's tool definitions
+- **Session branch entries** — per-session audit trail inside the host
+- **Project-level file** — `.pi-esr-memory/esr-state.json` for cross-session continuity
+- **Bootstrap recovery** — if neither exists, ESR can scan recent session files to recover prior graph state
 
 ## Architecture
 
@@ -127,14 +180,6 @@ packages/
         ├── validation.ts         Ontology validators + state transition matrix
         ├── graph.ts              ESRGraph class (core state machine)
         ├── context.ts            ESR context builder + fingerprint
-        ├── runtime.ts            ESRRuntime — tick loop + runUntilIdle
-        ├── state.ts              ESRRuntimeStateStore — node store + events
-        ├── planner.ts            DAG dependency planner
-        ├── executor.ts           Node execution with cache layer
-        ├── scheduler.ts          Simple priority scheduler
-        ├── cache.ts              InMemoryCacheStore + SHA256 cache keys
-        ├── runtime-types.ts      ExecutionNode, RuntimeEvent, etc.
-        ├── driver.ts             ToolDriverRegistry
         ├── store.ts              MemoryStore — SQLite-backed observation storage
         ├── recall.ts             Entity-anchored memory context builder
         ├── journal.ts            State transition journal + summaries
@@ -143,14 +188,12 @@ packages/
         └── index.ts              Package entry point
 extensions/
 ├── integration/
-│   ├── tools.ts              12 ESR tool registrations + runtime tool drivers
-│   └── commands.ts           /esr /esr-clear /esr-step /esr-run /esr-mem
+│   ├── tools.ts              11 ESR tool registrations
+│   └── commands.ts           /esr /esr-clear /esr-mem
 ├── persistence/
 │   ├── graph-persist.ts      Unified persistence (session + file)
 │   ├── snapshot.ts           Graph state persistence adapter
-│   ├── reconstruct.ts        Graph state reconstruction
-│   ├── runtime-state.ts      Runtime state persistence
-│   └── runtime-cache.ts      Runtime cache persistence
+│   └── reconstruct.ts        Graph state reconstruction
 ├── memory/
 │   └── tools.ts              4 esr_mem_* tool registrations
 ├── prompt.ts                 Prompt context builder
@@ -158,40 +201,34 @@ extensions/
 
 packages/core/tests/
 ├── graph.test.ts             49 tests
-├── cache.test.ts             4 tests
-├── planner.test.ts           4 tests
-├── runtime.test.ts           6 tests
 ├── memory.test.ts            24 tests
 ├── session.test.ts           3 tests
 └── validate-efficiency.test.ts 11 tests
 
 tests/
-├── tools.test.ts             21 tests
-├── persistence.test.ts       4 tests
-└── repository.test.ts        3 tests
+├── tools.test.ts             6 tests
+├── persistence.test.ts       3 tests
+└── repository.test.ts        5 tests
 ```
 
 ## Validation
 
-### Correctness (132 tests, 10 test files)
+### Correctness (111 tests, 8 test files)
 
 ```bash
-npm test                    # 132 tests, <1s
+npm test                    # 111 tests, <1s
 npm run typecheck           # tsc --noEmit, zero errors
 ```
 
 | Layer | Tests | What's covered |
 |-------|-------|---------------|
 | Graph core | 49 | Entity CRUD, state transitions, cycle detection, serialization roundtrips, fingerprint stability, immutability, context builder, artifact auto-proxy |
-| Tool drivers | 21 | All 11 driver operations + scheduler + runtime context |
-| Runtime | 6 | Tick execution, cache hit, invalidation cascade, persisted state roundtrips |
-| Cache | 4 | SHA256 key determinism, input-change detection, artifact version impact, persistence roundtrip |
-| Planner | 4 | Dependency-satisfied/none/pending, blocked-by-failure classification |
+| Tool integration | 6 | Registered graph tools, persistence writes, error handling, context output |
 | Memory | 24 | Store CRUD, recall/search/timeline, journal, context builder, format helpers, entity ID extraction, session tag filtering |
 | Session | 3 | Current session ID get/set/reset |
-| Efficiency | 11 | Token compression benchmarks, prefix-cache stability, context growth rate, cost projection, DAG parallelism |
-| Persistence | 4 | Reconstruct validation, malformed data rejection, session branch state loading |
-| Repository | 3 | SQLite-backed versioned entity storage, conflict detection |
+| Efficiency | 11 | Token compression benchmarks, prefix-cache stability, context growth rate, cost projection |
+| Persistence | 3 | Reconstruct validation, malformed data rejection, session branch state loading |
+| Repository | 5 | SQLite-backed versioned entity storage, conflict detection |
 
 ### Efficiency Benchmarks
 
@@ -218,13 +255,6 @@ ESR context is ~1.8x more compact than equivalent chat history at scale.
 - Context output is **byte-for-byte deterministic** — DeepSeek/Claude prefix cache compatible
 - Per-entity overhead: ~11 tokens (linear O(n), no quadratic blowup)
 - Per-relation overhead: ~18 tokens (entity + relation, linear O(n))
-
-#### DAG Parallelism
-
-| Scenario | Sequential (chat) | ESR runtime | Reduction |
-|----------|-------------------|-------------|-----------|
-| 3 independent nodes | 3 LLM rounds | 1 `esr_run` (zero-token) | **67%** |
-| 5-node chain, 1 changed | 5 re-executions | 3 re-executions (cache hit on 2) | **40%** |
 
 #### Cost Projection (DeepSeek pricing)
 
@@ -254,9 +284,6 @@ For a 100-entity session with 50 turns:
 **Semantic:** `supports` | `contradicts` | `refines`
 **Evaluation:** `evaluates` | `scores` | `validates`
 **Operational:** `triggers` | `updates` | `blocks` | `produces`
-
-### Execution States
-`pending` | `ready` | `running` | `succeeded` | `failed` | `blocked` | `cached`
 
 ## Golden Rules
 
