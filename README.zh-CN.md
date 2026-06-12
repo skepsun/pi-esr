@@ -21,13 +21,20 @@ pi-esr setup
 
 ```bash
 npm install -g pi-esr
+pi-esr plugin install --claude
+pi-esr plugin install --codex
+```
+
+`pi-esr plugin install --claude` 会安装 Claude Code 原生插件，并自动注册 `pi-esr` MCP 服务。
+
+`pi-esr plugin install --codex` 会安装 Codex 原生插件，并自动注册 `pi-esr` MCP 服务。
+
+如果你只想注册 MCP 而不安装原生插件，仍然可以使用：
+
+```bash
 pi-esr setup --claude
 pi-esr setup --codex
 ```
-
-`pi-esr setup --claude` 会注册 MCP 服务，并把受管的 ESR 指令块同步到 `CLAUDE.md`。
-
-`pi-esr setup --codex` 会注册 MCP 服务，并把受管的 ESR 指令块同步到 `AGENTS.md`。
 
 如果你更偏好手动方式，MCP 服务仍然通过 prompts discovery 暴露 `esr-system-prompt`。
 

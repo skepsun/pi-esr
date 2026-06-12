@@ -21,13 +21,20 @@ That's it — ESR graph tools, closure tools, pack tools, and optional memory to
 
 ```bash
 npm install -g pi-esr
+pi-esr plugin install --claude
+pi-esr plugin install --codex
+```
+
+`pi-esr plugin install --claude` installs the native Claude Code plugin and automatically registers the `pi-esr` MCP server.
+
+`pi-esr plugin install --codex` installs the native Codex plugin and automatically registers the `pi-esr` MCP server.
+
+If you only want MCP registration without the native plugin, you can still use:
+
+```bash
 pi-esr setup --claude
 pi-esr setup --codex
 ```
-
-`pi-esr setup --claude` registers the MCP server and syncs a managed ESR block into `CLAUDE.md`.
-
-`pi-esr setup --codex` registers the MCP server and syncs a managed ESR block into `AGENTS.md`.
 
 If you prefer manual setup, the MCP server still exposes `esr-system-prompt` via prompts discovery.
 
