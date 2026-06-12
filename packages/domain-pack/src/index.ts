@@ -19,6 +19,9 @@ export type {
 
 export type { ESRPackApplyPlan } from "./adapter.js";
 
+export type { PackLoadResult } from "./loader.js";
+
 export { buildPackApplyPlan, detectBestPack } from "./adapter.js";
-export { createBuiltinPackRegistry } from "./builtin.js";
+export { createBuiltinPackRegistry, createRegistry } from "./builtin.js";
+export { ensureDefaultPacksDir, getResolvedPacksPaths, loadExternalPacks } from "./loader.js";
 export { ESRDomainPackRegistry } from "./registry.js";

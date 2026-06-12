@@ -6,7 +6,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { buildPackApplyPlan, createBuiltinPackRegistry, detectBestPack } from "../../packages/domain-pack/src/index.js";
+import { buildPackApplyPlan, createRegistry, detectBestPack } from "../../packages/domain-pack/src/index.js";
 import {
   ESRGraph,
   buildESRContext,
@@ -31,12 +31,12 @@ function errorText(error: string) {
   };
 }
 
-export function registerTools(
+export async function registerTools(
   pi: ExtensionAPI,
   graph: ESRGraph,
-): void {
+): Promise<void> {
   const persistGraphFn = () => persistGraph(pi, graph);
-  const packRegistry = createBuiltinPackRegistry();
+  const { registry: packRegistry } = await createRegistry();
   const packs = packRegistry.list();
 
   // ── esr_create_entity ──────────────────────────────────

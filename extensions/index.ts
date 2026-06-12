@@ -72,7 +72,7 @@ function readRootPackageJson(): {
   }
 }
 
-export default function (pi: ExtensionAPI) {
+export default async function (pi: ExtensionAPI) {
   const graph = new ESRGraph();
   const memoryReport = detectMemoryCapabilities({
     cwd: process.cwd(),
@@ -108,7 +108,7 @@ export default function (pi: ExtensionAPI) {
 
   // ── Tools & commands ──────────────────────────────────
 
-  registerTools(pi, graph);
+  await registerTools(pi, graph);
   registerCommands(pi, graph);
 
   // ── Auto-journal (memory) ─────────────────────────────

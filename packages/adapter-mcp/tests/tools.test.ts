@@ -22,12 +22,12 @@ function makeRepo(): SqliteESRRepository {
 }
 
 describe("adapter-mcp pack tools", () => {
-  it("lists built-in packs", async () => {
+  it("lists available packs (classic three plus any external)", async () => {
     init(new ESRGraph(), new NullMemoryProvider(), makeRepo());
 
     const text = await TOOLS.esr_list_packs.handler({});
 
-    expect(text).toContain("Available packs (3)");
+    expect(text).toContain("Available packs");
     expect(text).toContain("govdoc@0.1.0");
     expect(text).toContain("planning-review@0.1.0");
     expect(text).toContain("software@0.1.0");

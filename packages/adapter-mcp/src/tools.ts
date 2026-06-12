@@ -6,7 +6,7 @@
  */
 
 import { z } from "zod";
-import { buildPackApplyPlan, createBuiltinPackRegistry, detectBestPack } from "../../domain-pack/src/index.js";
+import { buildPackApplyPlan, createRegistry, detectBestPack } from "../../domain-pack/src/index.js";
 import type { ESRMemoryProvider } from "../../memory-bridge/src/index.js";
 import { SqliteMemoryProvider } from "../../memory-bridge/src/index.js";
 import { buildJournalSummary } from "../../core/src/journal.js";
@@ -57,7 +57,7 @@ const RelationType = z.enum([
 ]);
 const TaskState = z.enum(["active", "stable"]);
 const JournalAction = z.enum(["view", "record"]);
-const packRegistry = createBuiltinPackRegistry();
+const { registry: packRegistry } = await createRegistry();
 const packs = packRegistry.list();
 
 // ── Tool registry ──────────────────────────────────────
@@ -276,7 +276,9 @@ export const TOOLS: Record<string, ToolEntry> = {
   },
 
   esr_list_packs: {
-    schema: z.object({}),
+    schema: z.object({
+      _: z.string().optional().describe("Unused — ensures schema compatibility with Pi Agent tool normalization"),
+    }),
     handler: async () => {
       const packList = packRegistry.list();
       return [
