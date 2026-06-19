@@ -29,7 +29,7 @@
     "plugins/pi-esr/.mcp.json"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc && mkdir -p plugins/pi-esr && cp -r .codex-plugin plugins/pi-esr/ && cp -r skills plugins/pi-esr/ && cp -r assets plugins/pi-esr/ && cp .mcp.json plugins/pi-esr/",
+    "build": "rm -rf dist && tsc && mkdir -p plugins/pi-esr && cp -r ../../.codex-plugin plugins/pi-esr/ && cp -r ../../skills plugins/pi-esr/ && cp -r ../../assets plugins/pi-esr/ && cp ../../.mcp.json plugins/pi-esr/",
     "typecheck": "tsc --noEmit",
     "postinstall": "node -e \"console.log('\\n✨ pi-esr installed! Run: pi-esr plugin install\\n')\""
   },

@@ -3,7 +3,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, dirname, parse } from "node:path";
+import { join, dirname, parse, resolve } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -51,14 +51,62 @@ function hasFile(path: string): boolean {
   return existsSync(path);
 }
 
+interface MCPLaunchSpec {
+  command: string;
+  args: string[];
+  mode: "local" | "package";
+}
+
+function findPluginDir(): string {
+  // Prefer cwd if it has the plugin structure (repo development)
+  if (existsSync(join(process.cwd(), ".claude-plugin", "plugin.json"))) return process.cwd();
+  // Walk up from dist/ until we find .claude-plugin/plugin.json
+  let dir = dirname(fileURLToPath(import.meta.url));
+  const root = parse(dir).root;
+  while (dir !== root) {
+    if (existsSync(join(dir, ".claude-plugin", "plugin.json"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return dirname(dirname(fileURLToPath(import.meta.url)));
+}
+
+function resolveMCPLaunchSpec(cwd: string = process.cwd()): MCPLaunchSpec {
+  const pluginDir = findPluginDir();
+  const localDist = resolve(pluginDir, "packages/adapter-mcp/dist/server.js");
+  if (existsSync(localDist) && cwd.startsWith(pluginDir)) {
+    return {
+      command: "node",
+      args: [localDist],
+      mode: "local",
+    };
+  }
+  return {
+    command: "npx",
+    args: ["@pi-esr/adapter-mcp"],
+    mode: "package",
+  };
+}
+
+function shellQuote(value: string): string {
+  return JSON.stringify(value);
+}
+
+function buildMCPAddCommand(client: "claude" | "codex", spec: MCPLaunchSpec): string {
+  const args = spec.args.map(shellQuote).join(" ");
+  return `${client} mcp add pi-esr -- ${shellQuote(spec.command)}${args ? ` ${args}` : ""}`;
+}
+
 
 
 // ── Config generators ──────────────────────────────────
 
 function mcpServerConfig(): object {
+  const spec = resolveMCPLaunchSpec();
   return {
-    command: "npx",
-    args: ["@pi-esr/adapter-mcp"],
+    command: spec.command,
+    args: spec.args,
   };
 }
 
@@ -74,11 +122,12 @@ function cursorMCPConfig(): object {
 }
 
 function claudeMCPConfig(): string {
+  const spec = resolveMCPLaunchSpec();
   return JSON.stringify({
     mcpServers: {
       "pi-esr": {
-        command: "npx",
-        args: ["@pi-esr/adapter-mcp"],
+        command: spec.command,
+        args: spec.args,
       },
     },
   }, null, 2);
@@ -205,13 +254,18 @@ function setupClaude(deps: SetupDeps = defaultDeps): SetupResult {
   try {
     const list = deps.exec("claude mcp list 2>/dev/null || true", { encoding: "utf-8" });
     const alreadyRegistered = list.includes("pi-esr");
+    const spec = resolveMCPLaunchSpec(deps.cwd());
     if (!alreadyRegistered) {
-      deps.exec("claude mcp add pi-esr -- npx @pi-esr/adapter-mcp", { stdio: "inherit" });
+      deps.exec(buildMCPAddCommand("claude", spec), { stdio: "inherit" });
     }
     return {
       agent: "Claude Code",
       status: alreadyRegistered ? "already" : "configured",
-      message: alreadyRegistered ? "MCP already registered" : "Registered via claude mcp add",
+      message: alreadyRegistered
+        ? "MCP already registered"
+        : spec.mode === "local"
+          ? "Registered via claude mcp add (local dist)"
+          : "Registered via claude mcp add (npx package)",
     };
   } catch (e: any) {
     return { agent: "Claude Code", status: "error", message: e.message ?? String(e) };
@@ -411,13 +465,18 @@ function setupCodex(deps: SetupDeps = defaultDeps): SetupResult {
   try {
     const list = deps.exec("codex mcp list 2>/dev/null || true", { encoding: "utf-8" });
     const alreadyRegistered = list.includes("pi-esr");
+    const spec = resolveMCPLaunchSpec(deps.cwd());
     if (!alreadyRegistered) {
-      deps.exec("codex mcp add pi-esr -- npx @pi-esr/adapter-mcp", { stdio: "inherit" });
+      deps.exec(buildMCPAddCommand("codex", spec), { stdio: "inherit" });
     }
     return {
       agent: "Codex",
       status: alreadyRegistered ? "already" : "configured",
-      message: alreadyRegistered ? "MCP already registered" : "Registered via codex mcp add",
+      message: alreadyRegistered
+        ? "MCP already registered"
+        : spec.mode === "local"
+          ? "Registered via codex mcp add (local dist)"
+          : "Registered via codex mcp add (npx package)",
     };
   } catch (e: any) {
     return { agent: "Codex", status: "error", message: e.message ?? String(e) };
@@ -426,19 +485,34 @@ function setupCodex(deps: SetupDeps = defaultDeps): SetupResult {
 
 // ── Plugin management functions ──────────────────────
 
-function findPluginDir(): string {
-  // Prefer cwd if it has the plugin structure (repo development)
-  if (existsSync(join(process.cwd(), ".claude-plugin", "plugin.json"))) return process.cwd();
-  // Walk up from dist/ until we find .claude-plugin/plugin.json
-  let dir = dirname(fileURLToPath(import.meta.url));
-  const root = parse(dir).root;
-  while (dir !== root) {
-    if (existsSync(join(dir, ".claude-plugin", "plugin.json"))) return dir;
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
+function mergeInstallWithSetup(
+  install: SetupResult,
+  setup: SetupResult,
+  fallbackConfiguredMessage: string,
+): SetupResult {
+  if (install.status === "error" || setup.status === "error") {
+    return install.status === "error" ? install : setup;
   }
-  return dirname(dirname(fileURLToPath(import.meta.url)));
+  if (install.status === "not-found" || setup.status === "not-found") {
+    return install.status === "not-found" ? install : setup;
+  }
+
+  const installMessage = install.message;
+  const setupMessage = setup.message;
+  const status =
+    install.status === "configured" || setup.status === "configured"
+      ? "configured"
+      : "already";
+  const message =
+    installMessage === setupMessage
+      ? installMessage
+      : `${installMessage}; ${setupMessage}` || fallbackConfiguredMessage;
+
+  return {
+    agent: install.agent,
+    status,
+    message,
+  };
 }
 
 function pluginInstallClaude(): SetupResult {
@@ -447,8 +521,11 @@ function pluginInstallClaude(): SetupResult {
   try {
     execSync(`claude plugin marketplace add ${JSON.stringify(pluginDir)} 2>/dev/null || true`, { stdio: "pipe" });
     const out = execSync("claude plugin install pi-esr 2>&1", { encoding: "utf-8" });
-    if (out.includes("already installed")) return { agent: "Claude Code", status: "already", message: "Plugin already installed" };
-    return { agent: "Claude Code", status: "configured", message: `Plugin installed from ${pluginDir}` };
+    const installResult: SetupResult = out.includes("already installed")
+      ? { agent: "Claude Code", status: "already", message: "Plugin already installed" }
+      : { agent: "Claude Code", status: "configured", message: `Plugin installed from ${pluginDir}` };
+    const setupResult = setupClaude();
+    return mergeInstallWithSetup(installResult, setupResult, "Plugin installed and MCP registered");
   } catch (e: any) {
     return { agent: "Claude Code", status: "error", message: e.message ?? String(e) };
   }
@@ -459,8 +536,12 @@ function pluginInstallCodex(): SetupResult {
   const pluginDir = findPluginDir();
   try {
     execSync(`codex plugin marketplace add ${JSON.stringify(pluginDir)} 2>/dev/null || true`, { stdio: "pipe" });
-    execSync("codex plugin add pi-esr@pi-esr 2>&1", { encoding: "utf-8" });
-    return { agent: "Codex", status: "configured", message: `Plugin installed from ${pluginDir}` };
+    const out = execSync("codex plugin add pi-esr@pi-esr 2>&1", { encoding: "utf-8" });
+    const installResult: SetupResult = out.includes("already installed")
+      ? { agent: "Codex", status: "already", message: "Plugin already installed" }
+      : { agent: "Codex", status: "configured", message: `Plugin installed from ${pluginDir}` };
+    const setupResult = setupCodex();
+    return mergeInstallWithSetup(installResult, setupResult, "Plugin installed and MCP registered");
   } catch (e: any) {
     return { agent: "Codex", status: "error", message: e.message ?? String(e) };
   }

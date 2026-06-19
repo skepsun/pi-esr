@@ -13,3 +13,14 @@ CLAUDE.md
 # Prevent stale in-source build artifacts
 packages/*/src/*.js
 packages/*/src/*.d.ts
+
+# Build output
+packages/*/dist/
+packages/cli/plugins/
+*.tgz
+
+# Runtime data
+.pi-loom/
+
+# Temp files
+package.json.new

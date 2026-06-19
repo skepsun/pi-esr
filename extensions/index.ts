@@ -86,6 +86,25 @@ export default async function (pi: ExtensionAPI) {
     `[pi-esr] Memory capability: status=${memoryReport.status} confidence=${memoryReport.confidence.toFixed(2)} kinds=${memoryReport.kinds.join(",") || "none"} provider=${selectedMemoryProvider}`,
   );
 
+  // ── Session startup protocol: enforce esr_get_context ──
+  // Blocks non-ESR, non-loom tools until state graph is loaded.
+  // (loom protocol enforced independently in pi-loom)
+
+  let esrContextLoaded = false;
+
+  pi.on("session_start", () => { esrContextLoaded = false; });
+
+  pi.on("tool_call", (event) => {
+    if (event.toolName === "esr_get_context") { esrContextLoaded = true; return; }
+    if (event.toolName.startsWith("esr_")) return;  // allow all ESR tools
+    if (event.toolName.startsWith("loom_")) return; // allow loom tools (own protocol in pi-loom)
+
+    if (!esrContextLoaded) {
+      console.error(`[pi-esr] Protocol: blocked ${event.toolName} — esr_get_context not yet called`);
+      return { block: true, reason: "Session protocol: call esr_get_context() first to load state graph" };
+    }
+  });
+
   // ── Event handlers ────────────────────────────────────
 
   pi.on("session_start", async (_event, ctx: ExtensionContext) => {

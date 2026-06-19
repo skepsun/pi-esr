@@ -3,7 +3,7 @@
  * pi-esr CLI
  *
  * Usage:
- *   pi-esr plugin install       Install as native plugin (✨ recommended)
+ *   pi-esr plugin install       Install as native plugin and register MCP where needed (✨ recommended)
  *   pi-esr plugin install --claude | --codex | --pi
  *   pi-esr plugin remove        Remove native plugin
  *   pi-esr plugin remove --claude | --codex | --pi
@@ -57,7 +57,7 @@ if (cmd === "setup") {
     if (agent) {
       printResult(pluginInstallOne(agent.replace(/^--/, "")));
     } else {
-      console.log("🔌 pi-esr plugin install — native plugins for Claude Code, Codex & Pi...\n");
+      console.log("🔌 pi-esr plugin install — native plugins plus MCP registration for Claude Code and Codex...\n");
       const results = pluginInstallAll();
       for (const r of results) printResult(r);
       console.log("\n✅ Done. Restart your agent to use ESR tools.");
@@ -82,7 +82,7 @@ if (cmd === "setup") {
     }
   } else {
     console.log("Usage: pi-esr plugin <command>");
-    console.log("  install           Install as native plugin (Claude Code + Codex + Pi)");
+    console.log("  install           Install plugin and register MCP where needed (Claude Code + Codex + Pi)");
     console.log("  install --claude  Install Claude Code plugin only");
     console.log("  install --codex   Install Codex plugin only");
     console.log("  install --pi      Install Pi Agent plugin only");
@@ -94,7 +94,7 @@ if (cmd === "setup") {
   }
 } else {
   console.log(`Usage: pi-esr <command>`);
-  console.log(`  plugin install       Install as native plugin (✨ recommended)`);
+  console.log(`  plugin install       Install plugin and register MCP where needed (✨ recommended)`);
   console.log(`  plugin install --claude | --codex | --pi`);
   console.log(`  plugin remove        Remove native plugin`);
   console.log(`  plugin remove --claude | --codex | --pi`);

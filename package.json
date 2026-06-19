@@ -10,9 +10,10 @@
     "semantic-graph"
   ],
   "type": "module",
-  "workspaces": [
-    "packages/*"
-  ],
+  "main": "./dist/bundle.js",
+  "bin": {
+    "pi-esr-mcp": "./dist/esr-mcp.js"
+  },
   "scripts": {
     "test": "vitest run tests/",
     "test:core": "vitest run packages/core/tests/",
@@ -20,6 +21,7 @@
     "test:all": "vitest run",
     "test:watch": "vitest",
     "build": "tsc && npm run build --workspaces --if-present",
+    "bundle": "node scripts/bundle.mjs",
     "typecheck": "tsc --noEmit"
   },
   "pi": {

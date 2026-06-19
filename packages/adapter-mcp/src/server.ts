@@ -208,7 +208,7 @@ When you promote a task to stable, you MUST execute the following closure sequen
 - Task entity exists with state=stable
 - At least one artifact linked via produces
 - Evaluation recorded with concrete metrics
-- `esr_get_closure_status` reports ready_for_stable=true before promotion
+- \`esr_get_closure_status\` reports ready_for_stable=true before promotion
 - Memory observation stored summarizing the work when memory is available
 - If part of a group: Concept + Actor + part_of relations present
 
