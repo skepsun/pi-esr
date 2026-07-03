@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.1] — 2026-07-03
+
+### Added
+- `docs/INSTALL.md`: comprehensive zero-to-installed guide for Codex, Claude Code, and Pi (3 installation paths, uninstall instructions)
+- `pi-esr` CLI entry to root `package.json` bin field (previously only `pi-esr-mcp` was exposed)
+
+### Fixed
+- Workspace dependency versions synchronized: `@pi-esr/core`, `@pi-esr/adapter-mcp`, `@pi-esr/adapter-opencode` bumped from `0.3.0` to `0.5.1` across all consuming packages
+- Claude Code marketplace format: `.claude-plugin/marketplace.json` updated to `git-subdir` source type (directory source unsupported by current Claude Code versions)
+- Claude Code plugin directory: added `.claude-plugin`, `hooks`, and `prompts` symlinks to `plugins/pi-esr/` for proper plugin asset resolution
+- Claude Code MCP registration: path corrected from relative `node dist/esr-mcp.js` to absolute `node /path/to/adapter-mcp/dist/server.js`
+
 ## [0.4.0] — 2026-07-02
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "name": "pi-esr",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "ESR (Engineering State Runtime) - constrained semantic graph state machine plugin for Pi agent",
   "keywords": [
     "pi-package",
@@ -15,7 +15,8 @@
   ],
   "main": "./dist/bundle.js",
   "bin": {
-    "pi-esr-mcp": "./dist/esr-mcp.js"
+    "pi-esr-mcp": "./dist/esr-mcp.js",
+    "pi-esr": "./packages/cli/dist/cli.js"
   },
   "scripts": {
     "test": "vitest run tests/",

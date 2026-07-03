@@ -1,6 +1,6 @@
 {
   "name": "pi-esr",
-  "version": "0.3.0",
+  "version": "0.5.1",
   "description": "Engineering State Runtime — structured task tracking, state management, and DAG execution for coding agents. Turn every coding session into a queryable, auditable knowledge graph.",
   "author": {
     "name": "pi-esr contributors"

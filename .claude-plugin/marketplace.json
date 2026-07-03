@@ -3,16 +3,21 @@
   "owner": {
     "name": "pi-esr"
   },
-  "metadata": {
-    "description": "Engineering State Runtime — structured task tracking, state management, and DAG execution for coding agents",
-    "version": "0.3.0"
-  },
+  "description": "Engineering State Runtime — structured task tracking, state management, and DAG execution for coding agents",
   "plugins": [
     {
       "name": "pi-esr",
-      "source": ".",
-      "skills": "./skills/",
-      "description": "Structured entity tracking, state management, and DAG execution. Creates a queryable knowledge graph from every coding session: entities with typed relations, task lifecycle (draft→active→stable), closure protocol with evaluations and artifacts, DAG execution via esr_create_node + esr_run, and persistent memory for cross-session context."
+      "description": "Structured entity tracking, state management, and DAG execution. Creates a queryable knowledge graph from every coding session.",
+      "author": {
+        "name": "pi-esr"
+      },
+      "category": "developer-tools",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/skepsun/pi-esr.git",
+        "path": "plugins/pi-esr",
+        "ref": "master"
+      }
     }
   ]
 }

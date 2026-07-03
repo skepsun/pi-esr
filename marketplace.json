@@ -1,19 +1,16 @@
 {
   "name": "pi-esr",
-  "interface": {
-    "displayName": "ESR (Engineering State Runtime)",
-    "shortDescription": "Structured task tracking and state management"
+  "owner": {
+    "name": "skepsun"
   },
   "plugins": [
     {
       "name": "pi-esr",
       "source": {
-        "source": "local",
+        "source": "directory",
         "path": "./plugins/pi-esr"
       },
-      "policy": {
-        "installation": "AVAILABLE"
-      },
+      "description": "ESR - structured state tracking for coding agents",
       "category": "Developer Tools"
     }
   ]

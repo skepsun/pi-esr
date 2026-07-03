@@ -1,6 +1,6 @@
 {
   "name": "@pi-esr/memory-bridge",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Memory bridge abstractions for pi-esr — provider interface, capability detection, and null provider",
   "type": "module",
   "main": "./dist/index.js",
