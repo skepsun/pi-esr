@@ -313,6 +313,15 @@ function setupPi(): SetupResult {
   }
 
   writeFileSync(pirc, JSON.stringify({ plugins: ["pi-esr"] }, null, 2), "utf-8");
+
+  // Also install locally so pi can find the extension
+  if (which("pi")) {
+    const result = pluginInstallPi();
+    if (result.status === "configured" || result.status === "already") {
+      return { agent: "Pi Agent", status: "configured", message: `${pirc} + ${result.message}` };
+    }
+  }
+
   return { agent: "Pi Agent", status: "configured", message: `Created ${pirc}` };
 }
 
@@ -551,8 +560,8 @@ function pluginInstallPi(): SetupResult {
   if (!which("pi")) return { agent: "Pi Agent", status: "error", message: "pi CLI not found" };
   // cli.js is at dist/cli.js — root package is 2 levels up
   const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
-  // In npm installs, dist/extensions/index.js exists at root. In dev, fall back to findPluginDir.
-  const installDir = existsSync(join(rootDir, "dist", "extensions", "index.js"))
+  // In npm installs, dist/pi-extension.js exists at root. In dev, fall back to findPluginDir.
+  const installDir = existsSync(join(rootDir, "dist", "pi-extension.js"))
     ? rootDir
     : findPluginDir();
   try {
