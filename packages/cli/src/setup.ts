@@ -573,6 +573,22 @@ function pluginInstallPi(): SetupResult {
   }
 }
 
+function _pluginInstallPiGlobal(): SetupResult {
+  if (!which("pi")) return { agent: "Pi Agent", status: "error", message: "pi CLI not found" };
+  try {
+    const out = execSync("pi install npm:pi-esr 2>&1", { encoding: "utf-8" });
+    if (out.includes("already installed")) return { agent: "Pi Agent", status: "already", message: "Already installed globally" };
+    return { agent: "Pi Agent", status: "configured", message: "Installed globally via npm:pi-esr" };
+  } catch (e: any) {
+    return { agent: "Pi Agent", status: "error", message: e.message ?? String(e) };
+  }
+}
+
+function _setupPiGlobal(): SetupResult {
+  if (!which("pi")) return { agent: "Pi Agent", status: "error", message: "pi CLI not found" };
+  return _pluginInstallPiGlobal();
+}
+
 function pluginRemoveClaude(): SetupResult {
   if (!which("claude")) return { agent: "Claude Code", status: "not-found", message: "claude CLI not found" };
   try {
@@ -663,6 +679,14 @@ export function pluginInstallOne(agent: string): SetupResult {
     case "pi": return pluginInstallPi();
     default: return { agent, status: "error", message: `Unknown agent: ${agent}. Use: claude, codex, pi` };
   }
+}
+
+export function pluginInstallPiGlobal(): SetupResult {
+  return _pluginInstallPiGlobal();
+}
+
+export function setupPiGlobal(): SetupResult {
+  return _setupPiGlobal();
 }
 
 export function pluginRemoveAll(): SetupResult[] {

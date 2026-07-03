@@ -3,47 +3,53 @@
  * pi-esr CLI
  *
  * Usage:
- *   pi-esr plugin install       Install as native plugin and register MCP where needed (✨ recommended)
- *   pi-esr plugin install --claude | --codex | --pi
- *   pi-esr plugin remove        Remove native plugin
- *   pi-esr plugin remove --claude | --codex | --pi
- *   pi-esr plugin status        Show plugin installation status
- *   pi-esr setup (legacy)       Auto-configure all agents via MCP+prompt injection
- *   pi-esr remove (legacy)      Remove legacy setup from all agents
- *   pi-esr status               Show configuration status
+ *   pi-esr setup                  Project-local install (default)
+ *   pi-esr setup --global         Global install for all projects
+ *   pi-esr setup --claude         MCP-only for Claude Code
+ *   pi-esr setup --codex          MCP-only for Codex
+ *   pi-esr plugin install         Install native plugin (Claude Code + Codex + Pi)
+ *   pi-esr plugin install --pi    Pi Agent only
+ *   pi-esr plugin install --pi --global  Global Pi install
  */
 
 import {
   setupAll, setupOne, statusAll, removeAll, removeOne,
   pluginInstallAll, pluginInstallOne, pluginRemoveAll, pluginRemoveOne, pluginStatusAll,
+  setupPiGlobal,
 } from "./setup.js";
 
-const cmd = process.argv[2] ?? "setup";
+const args = process.argv.slice(2);
+const cmd = args[0] ?? "setup";
+const isGlobal = args.includes("--global") || args.includes("-g");
+const agentFlag = args.find(a => !a.startsWith("-") && a !== cmd && a !== "plugin" && a !== "install" && a !== "remove" && a !== "status");
+const agent = agentFlag?.replace(/^--/, "");
 
 if (cmd === "setup") {
-  const agent = process.argv[3];
-  if (agent) {
-    const flag = agent.replace(/^--/, "");
-    printResult(setupOne(flag));
+  if (isGlobal && !agent) {
+    console.log("🌍 pi-esr setup --global — installing globally for all projects...\n");
+    printResult(setupPiGlobal());
+    printResult(setupOne("claude"));
+    printResult(setupOne("codex"));
+    printResult(setupOne("cursor"));
+    printResult(setupOne("opencode"));
+  } else if (agent) {
+    printResult(setupOne(agent));
   } else {
     console.log("🔧 pi-esr setup — configuring all supported agents...\n");
     const results = setupAll();
     for (const r of results) printResult(r);
-    console.log("\n✅ Done. Restart your agent to use ESR tools.");
   }
+  console.log("\n✅ Done. Restart your agent to use ESR tools.");
 } else if (cmd === "status") {
-  console.log("pi-esr v0.3.0");
-  console.log("");
+  console.log("pi-esr v0.6.2\n");
   const results = statusAll();
   for (const r of results) {
     const icon = r.status === "configured" ? "✅" : r.status === "already" ? "✓" : "✗";
     console.log(`  ${icon} ${r.agent}: ${r.message}`);
   }
 } else if (cmd === "remove") {
-  const agent = process.argv[3];
   if (agent) {
-    const flag = agent.replace(/^--/, "");
-    printResult(removeOne(flag));
+    printResult(removeOne(agent));
   } else {
     console.log("🔧 pi-esr remove — removing from all supported agents...\n");
     const results = removeAll();
@@ -51,11 +57,14 @@ if (cmd === "setup") {
     console.log("\n✅ Done. Restart your agent for changes to take effect.");
   }
 } else if (cmd === "plugin") {
-  const sub = process.argv[3];
+  const sub = args[1];
   if (sub === "install") {
-    const agent = process.argv[4];
     if (agent) {
-      printResult(pluginInstallOne(agent.replace(/^--/, "")));
+      if (agent === "pi" && isGlobal) {
+        printResult(pluginInstallPiGlobal());
+      } else {
+        printResult(pluginInstallOne(agent));
+      }
     } else {
       console.log("🔌 pi-esr plugin install — native plugins plus MCP registration for Claude Code and Codex...\n");
       const results = pluginInstallAll();
@@ -63,9 +72,8 @@ if (cmd === "setup") {
       console.log("\n✅ Done. Restart your agent to use ESR tools.");
     }
   } else if (sub === "remove") {
-    const agent = process.argv[4];
     if (agent) {
-      printResult(pluginRemoveOne(agent.replace(/^--/, "")));
+      printResult(pluginRemoveOne(agent));
     } else {
       console.log("🔌 pi-esr plugin remove — removing from all agents...\n");
       const results = pluginRemoveAll();
@@ -73,8 +81,7 @@ if (cmd === "setup") {
       console.log("\n✅ Done. Restart your agent for changes to take effect.");
     }
   } else if (sub === "status") {
-    console.log("pi-esr plugin status:");
-    console.log("");
+    console.log("pi-esr plugin status:\n");
     const results = pluginStatusAll();
     for (const r of results) {
       const icon = r.status === "configured" ? "✅" : r.status === "already" ? "✓" : r.status === "not-found" ? "⊘" : "✗";
@@ -82,26 +89,19 @@ if (cmd === "setup") {
     }
   } else {
     console.log("Usage: pi-esr plugin <command>");
-    console.log("  install           Install plugin and register MCP where needed (Claude Code + Codex + Pi)");
-    console.log("  install --claude  Install Claude Code plugin only");
-    console.log("  install --codex   Install Codex plugin only");
-    console.log("  install --pi      Install Pi Agent plugin only");
+    console.log("  install           Install plugin (Claude Code + Codex + Pi)");
+    console.log("  install --pi      Pi Agent only (project-local)");
+    console.log("  install --pi --global  Pi Agent globally");
     console.log("  remove            Remove plugin from all agents");
-    console.log("  remove --claude   Remove Claude Code plugin");
-    console.log("  remove --codex    Remove Codex plugin");
     console.log("  remove --pi       Remove Pi Agent plugin");
-    console.log("  status            Show plugin installation status");
+    console.log("  status            Show plugin status");
   }
 } else {
-  console.log(`Usage: pi-esr <command>`);
-  console.log(`  plugin install       Install plugin and register MCP where needed (✨ recommended)`);
-  console.log(`  plugin install --claude | --codex | --pi`);
-  console.log(`  plugin remove        Remove native plugin`);
-  console.log(`  plugin remove --claude | --codex | --pi`);
-  console.log(`  plugin status        Show plugin status`);
-  console.log(`  setup (legacy)       Auto-configure all agents via MCP+prompt injection`);
-  console.log(`  remove (legacy)      Remove legacy setup from all agents`);
-  console.log(`  status               Show setup status`);
+  console.log("Usage: pi-esr <command>");
+  console.log("  setup              Project-local install (recommended)");
+  console.log("  setup --global     Global install for all projects");
+  console.log("  plugin install     Install native plugins + MCP");
+  console.log("  plugin install --pi --global  Global Pi install");
 }
 
 function printResult(r: { agent: string; status: string; message: string }): void {
