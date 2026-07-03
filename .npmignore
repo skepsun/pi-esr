@@ -9,14 +9,11 @@ esr-state.json
 **/__snapshots__/
 .claude/worktrees/
 .pi-loom/
-.codex-plugin/
-.claude-plugin/
-.cursor-plugin/
-.openclaw-plugin/
 .claude/
 .cursor/
 .openclaw/
-.codex/
+.openclaw-plugin/
+.cursor-plugin/
 
 # Keep packages/ and unbundled extensions out of npm
 # dist/pi-extension.js is the self-contained bundle
