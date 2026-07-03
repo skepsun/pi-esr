@@ -1,0 +1,2 @@
+[permissions]
+allow = ["task", "Edit", "mcp__pi-esr__esr_list_tasks", "mcp__pi-esr__esr_get_context", "mcp__pi-esr__esr_get_closure_status", "mcp__pi-esr__esr_list_closure_gaps", "mcp__pi-esr__esr_mem_timeline"]

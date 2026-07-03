@@ -1,6 +1,6 @@
 {
   "name": "@pi-esr/adapter-mcp",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "description": "MCP adapter for pi-esr — run ESR as a Claude Code / Cursor MCP server",
   "type": "module",
   "main": "./dist/server.js",

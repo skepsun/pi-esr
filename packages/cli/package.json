@@ -1,6 +1,6 @@
 {
   "name": "pi-esr",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "description": "ESR (Engineering State Runtime) — constrained semantic graph state machine. One install, all agents.",
   "type": "module",
   "bin": {

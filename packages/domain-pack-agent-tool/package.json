@@ -1,7 +1,7 @@
 {
-  "name": "@pi-esr/domain-pack-planning-review",
-  "version": "0.5.0",
-  "description": "Planning review and strategic audit example domain pack for pi-esr",
+  "name": "@pi-esr/domain-pack-agent-tool",
+  "version": "0.1.0",
+  "description": "Agent tool / MCP server / plugin development domain pack for pi-esr",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -15,5 +15,5 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": ["esr", "domain-pack", "planning-review", "strategy-audit"]
+  "keywords": ["esr", "domain-pack", "agent-tool", "mcp", "plugin", "tool-development"]
 }

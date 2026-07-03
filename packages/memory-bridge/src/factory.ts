@@ -1,4 +1,5 @@
 import type { MemoryStore } from "../../core/src/store.js";
+import { HostMemoryProvider } from "./host-provider.js";
 import { NullMemoryProvider } from "./null-provider.js";
 import type { ESRMemoryProvider } from "./provider.js";
 import { selectMemoryProvider } from "./select.js";
@@ -25,8 +26,12 @@ export function createMemoryProvider(options: CreateMemoryProviderOptions): ESRM
   }
 
   // When an external memory system is detected, ESR should not compete with it.
-  // Keep ESR in bridge-only mode until a concrete host provider is implemented.
-  return withReason(new NullMemoryProvider(), `external_memory_detected:${providerName}`);
+  // Use a HostMemoryProvider that bridges to the external system — actual wire-up
+  // is the host runtime's responsibility via HostMemoryDelegate.
+  return withReason(new HostMemoryProvider(providerName, {
+    // All delegate methods are optional — host wires what it supports.
+    // Unwired methods return safe empty results per HostMemoryProvider defaults.
+  }), `external_memory_detected:${providerName}`);
 }
 
 function withReason<T extends ESRMemoryProvider>(provider: T, reason: string): T {

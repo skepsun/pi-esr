@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ESRGraph } from "@pi-esr/core";
 import { registerTools } from "../extensions/integration/tools";
+import { softwarePack } from "@pi-esr/domain-pack-software";
+import { govdocPack } from "@pi-esr/domain-pack-govdoc";
+import { planningReviewPack } from "@pi-esr/domain-pack-planning-review";
+import { agentToolPack } from "@pi-esr/domain-pack-agent-tool";
+
+const packs = [softwarePack, govdocPack, planningReviewPack, agentToolPack];
 
 type RegisteredTool = {
   name: string;
@@ -41,7 +47,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     expect(tools.has("esr_create_entity")).toBe(true);
     expect(tools.has("esr_update_state")).toBe(true);
@@ -60,7 +66,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools, entries } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     const created = await runTool(tools, "esr_create_entity", {
       entity_id: "task-1",
@@ -91,7 +97,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     await runTool(tools, "esr_create_entity", { entity_id: "a", role: "Concept" });
     await runTool(tools, "esr_create_entity", { entity_id: "b", role: "Concept" });
@@ -119,7 +125,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     await runTool(tools, "esr_create_entity", {
       entity_id: "artifact-1",
@@ -138,7 +144,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     await runTool(tools, "esr_create_entity", { entity_id: "a", role: "Concept" });
     await runTool(tools, "esr_create_entity", { entity_id: "b", role: "Concept" });
@@ -159,7 +165,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     const result = await runTool(tools, "esr_update_state", {
       entity_id: "missing",
@@ -174,7 +180,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     const result = await runTool(tools, "esr_get_closure_status", {
       task_id: "missing-task",
@@ -188,7 +194,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
     await runTool(tools, "esr_create_entity", {
       entity_id: "task-closure-1",
       role: "Task",
@@ -207,7 +213,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
     await runTool(tools, "esr_create_entity", {
       entity_id: "task-closure-2",
       role: "Task",
@@ -248,7 +254,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
     await runTool(tools, "esr_create_entity", {
       entity_id: "task-closure-3",
       role: "Task",
@@ -289,7 +295,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
     await runTool(tools, "esr_create_entity", {
       entity_id: "task-memory-ref",
       role: "Task",
@@ -341,7 +347,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
     await runTool(tools, "esr_create_entity", {
       entity_id: "task-gap-list",
       role: "Task",
@@ -388,7 +394,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
     await runTool(tools, "esr_create_entity", {
       entity_id: "task-gap-list-2",
       role: "Task",
@@ -434,7 +440,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
     await runTool(tools, "esr_create_entity", {
       entity_id: "task-list-view",
       role: "Task",
@@ -486,7 +492,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     const result = await runTool(tools, "esr_detect_pack", {
       prompt: "refactor the TypeScript API module and add tests",
@@ -501,22 +507,22 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     const result = await runTool(tools, "esr_list_packs", {});
 
-    expect(result.content[0]?.text).toContain("Available packs (3)");
+    expect(result.content[0]?.text).toContain("Available packs (4)");
     expect(result.content[0]?.text).toContain("govdoc@0.1.0");
     expect(result.content[0]?.text).toContain("planning-review@0.1.0");
     expect(result.content[0]?.text).toContain("software@0.1.0");
-    expect(result.details.packs).toHaveLength(3);
+    expect(result.details.packs).toHaveLength(4);
   });
 
   it("expands a goal with the software pack into ESR state", async () => {
     const graph = new ESRGraph();
     const { pi, tools, entries } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     const result = await runTool(tools, "esr_expand_with_pack", {
       goal: "fix login bug and add tests",
@@ -534,14 +540,14 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
     await runTool(tools, "esr_expand_with_pack", {
       goal: "refactor auth module and add tests",
       pack_name: "software",
     });
-    await runTool(tools, "esr_promote_task", {
+    await runTool(tools, "esr_update_state", {
       entity_id: "task-main",
-      new_state: "active",
+      state: "active",
     });
     await runTool(tools, "esr_create_entity", {
       entity_id: "actor-software-pack",
@@ -589,7 +595,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     const result = await runTool(tools, "esr_detect_pack", {
       prompt: "写一个公文式项目申请书，包含预算和政策依据",
@@ -604,7 +610,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     const result = await runTool(tools, "esr_detect_pack", {
       prompt: "编写十五五规划审核报告，检查战略对齐和整改跟踪",
@@ -619,7 +625,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     const result = await runTool(tools, "esr_detect_pack", {
       prompt: "审核十五五规划待审核稿，检查战略对齐、指标完整性、数据一致性，并输出审核报告和整改跟踪建议",
@@ -633,7 +639,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     const result = await runTool(tools, "esr_expand_with_pack", {
       goal: "审核十五五规划并输出问题清单和整改建议",
@@ -657,7 +663,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     const result = await runTool(tools, "esr_expand_with_pack", {
       goal: "审核十五五规划待审核稿，已覆盖战略衔接、指标体系、数据测算口径、审查意见和整改台账，需补齐与国家标准要求的符合性响应",
@@ -684,7 +690,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
 
     const result = await runTool(tools, "esr_expand_with_pack", {
       goal: "写一个数据基础设施项目立项书",
@@ -706,18 +712,18 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
     await runTool(tools, "esr_expand_with_pack", {
       goal: "写一个数据基础设施项目立项书",
       pack_name: "govdoc",
     });
-    await runTool(tools, "esr_promote_task", {
+    await runTool(tools, "esr_update_state", {
       entity_id: "section-budget",
-      new_state: "active",
+      state: "active",
     });
-    await runTool(tools, "esr_promote_task", {
+    await runTool(tools, "esr_update_state", {
       entity_id: "section-risk",
-      new_state: "active",
+      state: "active",
     });
 
     const taskList = await runTool(tools, "esr_list_tasks", {
@@ -738,7 +744,7 @@ describe("registerTools", () => {
     const graph = new ESRGraph();
     const { pi, tools } = createPiStub();
 
-    await registerTools(pi as never, graph);
+    await registerTools(pi as never, graph, packs);
     await runTool(tools, "esr_expand_with_pack", {
       goal: "写一个项目立项书",
       pack_name: "govdoc",

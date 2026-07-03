@@ -18,7 +18,9 @@
       "@pi-esr/domain-pack": ["./packages/domain-pack/src"],
       "@pi-esr/domain-pack-software": ["./packages/domain-pack-software/src"],
       "@pi-esr/domain-pack-govdoc": ["./packages/domain-pack-govdoc/src"],
-      "@pi-esr/domain-pack-planning-review": ["./packages/domain-pack-planning-review/src"]
+      "@pi-esr/domain-pack-planning-review": ["./packages/domain-pack-planning-review/src"],
+      "@pi-esr/domain-pack-agent-tool": ["./packages/domain-pack-agent-tool/src"],
+      "@pi-esr/domain-pack-refactor": ["./packages/domain-pack-refactor/src"]
     }
   },
   "include": [
@@ -29,7 +31,9 @@
     "packages/domain-pack/src/**/*.ts",
     "packages/domain-pack-software/src/**/*.ts",
     "packages/domain-pack-govdoc/src/**/*.ts",
-    "packages/domain-pack-planning-review/src/**/*.ts"
+    "packages/domain-pack-planning-review/src/**/*.ts",
+    "packages/domain-pack-agent-tool/src/**/*.ts",
+    "packages/domain-pack-refactor/src/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }

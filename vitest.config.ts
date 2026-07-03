@@ -7,6 +7,11 @@ export default defineConfig({
   resolve: {
     alias: {
       "@pi-esr/core": "./packages/core/src",
+      "@pi-esr/domain-pack-software": "./packages/domain-pack-software/src",
+      "@pi-esr/domain-pack-govdoc": "./packages/domain-pack-govdoc/src",
+      "@pi-esr/domain-pack-planning-review": "./packages/domain-pack-planning-review/src",
+      "@pi-esr/domain-pack-agent-tool": "./packages/domain-pack-agent-tool/src",
+      "@pi-esr/domain-pack-refactor": "./packages/domain-pack-refactor/src",
     },
   },
   test: {

@@ -98,7 +98,9 @@ describe("Closure Status", () => {
       .sort();
     graph.updateEntityState(constraints[0], "stable");
 
-    const status = getClosureStatus(graph, "task-1");
+    const status = getClosureStatus(graph, "task-1", {
+      policy: { require_constraints_satisfied_for_stable: true },
+    });
 
     expect(status.has_constraint).toBe(true);
     expect(status.satisfied_constraints).toHaveLength(1);

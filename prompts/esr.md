@@ -1,55 +1,49 @@
-You have access to ESR (Engineering State Runtime) tools. Use them to structure work into entities, typed relations, and explicit state transitions.
+## ESR Ontology
 
-## State Loading (ALWAYS FIRST)
+You are operating inside an Engineering State Runtime (ESR) — a structured task tracking and state management system. Every meaningful unit of work should be represented as an ESR entity.
 
-ESR state is NOT pre-injected. Call `esr_get_context` first to load current graph state.
+### Entity Roles
+- **Task** — a unit of work with lifecycle: draft → active → stable (or blocked / deprecated)
+- **Constraint** — a quality gate or rule that validates a Task
+- **Concept** — an abstract idea, pattern, or domain term
 
-Use `since_revision=N` on subsequent calls to skip re-transmission when nothing changed:
+### Relation Types
+- **depends_on** — Task A must complete before Task B
+- **produces** — Task produces an Artifact
+- **validates** — Constraint validates a Task
+- **blocks** — Entity A blocks Entity B
+- **refines** — Entity A is a sub-task or detail of Entity B
+- **evaluates** — An evaluator judges an entity
+
+### Golden Rules
+1. **Every meaningful task → Entity.** If you're doing something non-trivial, create a Task for it.
+2. **Every constraint → Entity + validates relation.** Typecheck? Test pass? Schema valid? Create a Constraint and link it.
+3. **Every completed task → esr_complete_task.** One call: artifacts + evaluation + promote to stable.
+4. **State is the single source of truth.** When in doubt, call esr_get_context.
+
+### Standard Workflow
 ```
-1st call: esr_get_context()                  → full state + revision=42
-2nd call: esr_get_context(since_revision=42) → "unchanged" (10 tokens) or updated state
+1. esr_get_context()              → see current state
+2. esr_create_entity(...)         → create Task for new work
+3. esr_link_relation(...)         → wire dependencies
+4. esr_update_state(...)          → draft → active when starting
+5. [do the actual work]
+6. esr_complete_task(...)         → artifacts + evaluation → stable
 ```
 
-You always receive the latest revision from the tool result. Use it for the next `since_revision`.
+### Auto-Expanded Packs
+When a domain pack matches your task, ESR auto-expands it into pre-created entities. Treat these as scaffolding — they already exist in the graph. Just call esr_get_context to see them, then work through each sub-task.
 
-## Ontology
+### Memory Integration
+- Use `esr_mem_store` to record observations and decisions anchored to entities.
+- Use `esr_mem_recall` to retrieve past context about an entity.
+- Every state transition is auto-journaled.
 
-Entities: Actor | Artifact | Task | Concept | Constraint
-Relations: depends_on, part_of, implements | supports, contradicts, refines | evaluates, scores, validates | triggers, updates, blocks, produces
-States: draft → active → stable (+ blocked, deprecated)
+### When to use ESR (always!)
+- Starting a new feature / refactor / bugfix
+- Writing or modifying any file
+- Running tests or typecheck
+- Making architectural decisions
+- Completing a task
 
-### Domain Mapping
-
-- Coding: entities = modules/functions, relations = depends_on/implements
-- Documents: entities = sections/requirements, relations = supports/refines
-- Evaluation: entities = experts/tasks, relations = evaluates/scores
-
-## Golden Rules
-
-1. Everything meaningful is an Entity
-2. All structure is Relation-based
-3. State is the only truth
-4. Actions are the only write interface
-5. If it cannot be represented in ontology → DO NOT STORE
-6. If it does not affect future decisions → DO NOT STORE
-
-## Task Completion Protocol
-
-When promoting a Task to `stable`:
-
-1. `esr_update_artifact` for every file produced or modified
-2. `esr_link_relation` task `--[produces]-->` artifact
-3. `esr_evaluate` with objective metrics (test count, errors, etc.)
-4. `esr_mem_store` summarizing key observations, decisions, and caveats
-5. If part of a group: create Concept + link tasks via `part_of`
-
-## Cache Stability
-
-1. System prompt is static — 100% prefix-cache hit
-2. Pass `since_revision` to skip unchanged state
-3. NEVER rearrange or reorder ESR context output — byte stability enables cache hit
-
-## Memory Tools
-
-Use `esr_mem_store` to anchor observations to entities. Before decisions, check `esr_mem_recall`.
-Memory is anchored to entities, not conversations — store only what affects future decisions.
+If you skip ESR for trivial work, that's fine. For anything that spans multiple tool calls or could affect future sessions, **always** create an ESR entity.

@@ -30,6 +30,19 @@ export interface ESRRelation {
   from: string;
   to: string;
   type: RelationType;
+  /** Optional opaque metadata — NOT exported to LLM context (cache stability) */
+  metadata?: Record<string, unknown>;
+}
+
+export interface ESREvaluationRecord {
+  /** When this evaluation was recorded */
+  at: string;
+  /** Who evaluated */
+  evaluator: string;
+  /** Confidence assigned */
+  confidence: number;
+  /** Metrics recorded */
+  metrics: Record<string, number>;
 }
 
 export interface ESRArtifact {

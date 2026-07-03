@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.4.0] — 2026-07-02
+
+### Added
+- `agent-tool@0.1.0` domain pack: tool contract, schema design, error taxonomy, timeout strategy, and idempotency checks
+- `[ESR_SNAPSHOT]` auto-injection: compact task + constraint summary injected into system prompt every turn
+- Pack auto-expand now lists concrete entity IDs + constraints + actionable next steps
+
+### Changed
+- `prompts/esr.md`: expanded from 1 line to full ontology, golden rules, closure protocol, workflow guide, and "when to use ESR"
+- `buildStaticPrompt()` → `buildESRPrompt(stateSummary?, packHint?)`: composes methodology + dynamic snapshot + pack hint
+- Default closure policy: `require_constraints_satisfied_for_stable` changed to `false` (constraints are advisory by default)
+
+### Fixed
+- Closure test now explicitly passes `require_constraints_satisfied_for_stable: true` policy
+- Pack integration tests now supply real pack objects instead of empty array
+- Vitest config aliases extended with all domain pack packages
+
+## [0.5.0] — 2026-07-03
+
+### Added
+- `esr_complete_task` tool — single-call task closure combining artifact recording, evaluation, memory ref attachment, closure validation, and promotion to stable
+- End-to-end benchmark (21 tests) simulating a 3-session refactor scenario
+- `pi-memory-stack` meta package structure bundling context-mode + pi-loom + pi-esr
+- Layer detection protocol documentation (DESIGN.md)
+
+### Changed
+- Slimmed `prompts/esr.md` from 55 lines to 1 paragraph — ontology details moved to `skills/esr/SKILL.md` (on-demand via `/skill:esr`)
+- SKILL.md reorganized: `esr_complete_task` as primary completion path, low-level tools documented as extended
+- Tool reference table split into Core (7 tools) and Extended (14 tools) sections
+
 ## [0.3.1] — 2026-06-07
 
 ### Added

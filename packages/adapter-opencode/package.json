@@ -1,6 +1,6 @@
 {
   "name": "@pi-esr/adapter-opencode",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "description": "OpenCode adapter for pi-esr — registers ESR as MCP tools in OpenCode",
   "type": "module",
   "main": "./dist/index.js",

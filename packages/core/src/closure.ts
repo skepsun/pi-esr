@@ -1,5 +1,7 @@
 import { ESRGraph } from "./graph.js";
 import type { EntityState } from "./types.js";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 export interface ESRClosurePolicy {
   require_artifact_for_stable: boolean;
@@ -39,8 +41,43 @@ const DEFAULT_POLICY: ESRClosurePolicy = {
   require_artifact_for_stable: true,
   require_evaluation_for_stable: true,
   require_memory_ref_for_stable: false,
-  require_constraints_satisfied_for_stable: true,
+  require_constraints_satisfied_for_stable: false,
 };
+
+let cachedPolicy: ESRClosurePolicy | null = null;
+
+function getPolicyDir(): string {
+  if (process.env.PI_ESR_MEMORY_DIR) return process.env.PI_ESR_MEMORY_DIR;
+  return join(process.cwd(), ".pi-esr-memory");
+}
+
+/** Load the effective closure policy, merging defaults with project overrides. */
+export function loadClosurePolicy(): ESRClosurePolicy {
+  if (cachedPolicy) return cachedPolicy;
+
+  const policyPath = join(getPolicyDir(), "esr-policy.json");
+  let projectPolicy: Partial<ESRClosurePolicy> = {};
+  if (existsSync(policyPath)) {
+    try {
+      const raw = readFileSync(policyPath, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        if (typeof parsed.require_artifact_for_stable === "boolean") projectPolicy.require_artifact_for_stable = parsed.require_artifact_for_stable;
+        if (typeof parsed.require_evaluation_for_stable === "boolean") projectPolicy.require_evaluation_for_stable = parsed.require_evaluation_for_stable;
+        if (typeof parsed.require_memory_ref_for_stable === "boolean") projectPolicy.require_memory_ref_for_stable = parsed.require_memory_ref_for_stable;
+        if (typeof parsed.require_constraints_satisfied_for_stable === "boolean") projectPolicy.require_constraints_satisfied_for_stable = parsed.require_constraints_satisfied_for_stable;
+      }
+    } catch { /* ignore malformed policy */ }
+  }
+
+  cachedPolicy = { ...DEFAULT_POLICY, ...projectPolicy };
+  return cachedPolicy;
+}
+
+/** Reset the cached policy so the next call reloads from disk. */
+export function resetClosurePolicy(): void {
+  cachedPolicy = null;
+}
 
 export function getClosureStatus(
   graph: ESRGraph,
@@ -49,7 +86,8 @@ export function getClosureStatus(
     policy?: Partial<ESRClosurePolicy>;
   },
 ): ESRClosureStatus {
-  const policy = { ...DEFAULT_POLICY, ...(opts?.policy ?? {}) };
+  const basePolicy = opts?.policy ? { ...loadClosurePolicy(), ...opts.policy } : loadClosurePolicy();
+  const policy = { ...DEFAULT_POLICY, ...basePolicy };
   const task = graph.getEntity(taskId);
   const memoryRefs = graph.getMemoryRefs(taskId);
 

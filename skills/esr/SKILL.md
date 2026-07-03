@@ -70,10 +70,30 @@ esr_get_context(since_revision=N)   — Pass the revision from your last call.
 ```
 3. esr_create_entity      — Create a Task entity (state=draft)
 4. esr_link_relation      — Link dependencies (depends_on existing tasks)
-5. esr_promote_task       — draft → active (work begins!)
+5. esr_update_state       — draft → active (work begins!)
 ```
 
-**When completing a task — CLOSURE PROTOCOL (MANDATORY):**
+**When completing a task — use esr_complete_task (preferred):**
+
+```
+// One call replaces 5+ low-level operations:
+esr_complete_task({
+  task_id: "task-auth",
+  artifacts: [
+    { id: "src/auth.ts", type: "code", sections: [{name: "src/auth.ts", state: "stable"}] }
+  ],
+  evaluation: {
+    evaluator: "actor-pi-agent",
+    confidence: 0.9,
+    metrics: { test_count: 3, typecheck_errors: 0 }
+  },
+  memory_ref: { provider: "pi-loom", ref_id: "mem_abc", kind: "summary", title: "Auth refactor decisions" }
+})
+```
+
+This single call: records artifacts + links produces relations + records evaluation + optionally attaches memory ref + validates closure + promotes to stable.
+
+**When completing a task — low-level protocol (for fine-grained control):**
 
 ```
 6. esr_update_artifact    — For EVERY file produced or modified
@@ -81,7 +101,7 @@ esr_get_context(since_revision=N)   — Pass the revision from your last call.
 8. esr_evaluate           — With objective metrics (test_count, typecheck_errors, lines_changed...)
 9. esr_get_closure_status — Check missing evidence before promotion
 10. esr_mem_store         — Optional summary when memory is available
-11. esr_promote_task      — active → stable only after closure is ready
+11. esr_update_state      — active → stable only after closure is ready
 ```
 
 **For multi-task initiatives:**
@@ -91,7 +111,7 @@ esr_get_context(since_revision=N)   — Pass the revision from your last call.
 13. esr_link_relation     — Each task --[part_of]--> Concept
 14. esr_create_entity     — Actor entity (who did the work)
 15. esr_link_relation     — Actor --[evaluates]--> each task
-16. esr_apply_constraint  — Quality gates (e.g. "typecheck: 0 errors")
+16. esr_create_entity     — Constraint entity (quality gate), then link with validates
 ```
 
 ## Memory Layer
@@ -133,24 +153,27 @@ Use them to keep ESR Core generic while still supporting real enterprise scenari
 
 ## Common Patterns
 
-**Coding task workflow:**
+**Coding task workflow (recommended):**
 ```
 esr_create_entity t1 Task "fix-login-bug"        → esr_promote_task t1 active
 ... do the work ...
-esr_update_artifact a1 code {file: "src/auth.ts"} → esr_link_relation t1 produces a1
-esr_evaluate t1 by-evaluator claude-code {test_count: 3, typecheck_errors: 0}
-esr_get_closure_status t1
-esr_mem_store t1 "Fixed null pointer in login handler, added 3 tests"   (optional)
-esr_promote_task t1 stable
+esr_complete_task t1 {
+  artifacts: [{id: "src/auth.ts", type: "code", sections: [{name: "src/auth.ts", state: "stable"}]}],
+  evaluation: {evaluator: "actor-pi-agent", confidence: 0.9, metrics: {test_count: 3, typecheck_errors: 0}},
+  memory_ref: {provider: "pi-loom", ref_id: "mem_xyz", kind: "summary"}
+}
 ```
 
 **Document writing workflow:**
 ```
-esr_create_entity d1 Artifact "api-docs"         → esr_create_entity t1 Task "write-api-docs"
-esr_link_relation t1 depends_on d1               → esr_promote_task t1 active
+esr_create_entity t1 Task "write-api-docs"       → esr_promote_task t1 active
 ... write docs ...
-esr_update_artifact d1 document {section: "Overview" state: stable}
-esr_evaluate t1 {pages: 5, sections: 12}         → esr_promote_task t1 stable
+esr_complete_task t1 {
+  artifacts: [{id: "docs/api.md", type: "document", sections: [
+    {name: "Overview", state: "stable"}, {name: "Endpoints", state: "stable"}
+  ]}],
+  evaluation: {evaluator: "actor-pi-agent", confidence: 0.95, metrics: {pages: 5, sections: 12}}
+}
 ```
 
 **Cross-session recall:**
@@ -163,20 +186,32 @@ esr_get_context(since_revision=42)                 → Check if anything changed
 
 ## Tool Reference
 
+### Core tools (always use these first)
+
 | Tool | When to use |
 |------|------------|
 | `esr_get_context` | Start of every session, before decisions, pass `since_revision` for incremental |
 | `esr_create_entity` | New task, artifact, concept, actor, constraint |
-| `esr_update_state` | Change state, confidence, or metrics |
 | `esr_link_relation` | Connect any two entities |
-| `esr_evaluate` | Task completion, quality assessment |
+| `esr_complete_task` | **Primary way to close a task** — records artifacts + evaluation + validates closure + promotes |
+| `esr_promote_task` | Advance draft→active (use esr_complete_task for active→stable) |
+| `esr_get_closure_status` | Check what's missing before promoting to stable |
+| `esr_list_tasks` | See all tasks with closure summaries |
+
+### Extended tools (for fine-grained control)
+
+| Tool | When to use |
+|------|------------|
+| `esr_evaluate` | Standalone evaluation (if not using esr_complete_task) |
+| `esr_update_artifact` | Standalone artifact update (if not using esr_complete_task) |
+| `esr_update_state` | Change state, confidence, or metrics manually |
 | `esr_score` | Attach numeric metrics to entities |
-| `esr_promote_task` | Advance draft→active or active→stable |
-| `esr_update_artifact` | Record produced/modified files |
 | `esr_apply_constraint` | Add quality gates |
-| `esr_get_closure_status` | Check whether a task is ready for stable |
+| `esr_list_closure_gaps` | Audit which tasks are not ready for stable |
 | `esr_remove_entity` | Clean up irrelevant entities |
 | `esr_remove_relation` | Remove invalid connections |
+| `esr_detect_pack` | Detect best domain pack for a prompt |
+| `esr_expand_with_pack` | Expand a goal through a domain pack |
 | `esr_mem_store` | Save observations for later recall when memory is available |
 | `esr_mem_recall` | Search past observations |
 | `esr_mem_timeline` | Audit entity history |

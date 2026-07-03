@@ -1,12 +1,12 @@
 /**
- * pi-esr: Pi Tool Registrations — 11 graph tools
+ * pi-esr: Pi Tool Registrations
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { buildPackApplyPlan, createRegistry, detectBestPack } from "../../packages/domain-pack/src/index.js";
+import { buildPackApplyPlan, detectBestPack } from "../../packages/domain-pack/src/index.js";
 import {
   ESRGraph,
   buildESRContext,
@@ -34,21 +34,20 @@ function errorText(error: string) {
 export async function registerTools(
   pi: ExtensionAPI,
   graph: ESRGraph,
+  packs: any[],
 ): Promise<void> {
   const persistGraphFn = () => persistGraph(pi, graph);
-  const { registry: packRegistry } = await createRegistry();
-  const packs = packRegistry.list();
 
   // ── esr_create_entity ──────────────────────────────────
 
   pi.registerTool({
     name: "esr_create_entity",
     label: "ESR Create Entity",
-    description: "Create a new entity in the ESR graph.",
+    description: "Create a new entity in the ESR graph. Constraints are entities too: create a Constraint, then link with validates relation.",
     promptSnippet: "Create a new entity in the ESR state graph",
     parameters: Type.Object({
       entity_id: Type.String({ description: "Unique identifier for this entity" }),
-      role: StringEnum(["Actor", "Artifact", "Task", "Concept", "Constraint"] as const),
+      role: StringEnum(["Task", "Constraint", "Concept"] as const),
       label: Type.Optional(Type.String({ description: "Human-readable label" })),
       state: Type.Optional(StringEnum(["active", "stable", "draft", "blocked", "deprecated"] as const)),
       confidence: Type.Optional(Type.Number({ description: "Confidence 0.0-1.0, default 0" })),
@@ -76,7 +75,7 @@ export async function registerTools(
   pi.registerTool({
     name: "esr_update_state",
     label: "ESR Update State",
-    description: "Update an entity's state, confidence, or metrics.",
+    description: "Update an entity's state (including promoting Tasks to active/stable), confidence, or metrics.",
     promptSnippet: "Update entity state, confidence, or metrics in the ESR graph",
     parameters: Type.Object({
       entity_id: Type.String({ description: "Entity to update" }),
@@ -109,7 +108,7 @@ export async function registerTools(
     parameters: Type.Object({
       from: Type.String({ description: "Source entity ID" }),
       to: Type.String({ description: "Target entity ID" }),
-      type: StringEnum(["depends_on", "part_of", "implements", "supports", "contradicts", "refines", "evaluates", "scores", "validates", "triggers", "updates", "blocks", "produces"] as const),
+      type: StringEnum(["depends_on", "produces", "validates", "blocks", "refines", "evaluates"] as const),
     }),
     async execute(_id, params: any) {
       const r = graph.linkRelation(params.from, params.to, params.type);
@@ -140,45 +139,6 @@ export async function registerTools(
     },
   });
 
-  // ── esr_score ──────────────────────────────────────────
-
-  pi.registerTool({
-    name: "esr_score",
-    label: "ESR Score",
-    description: "Attach a numeric score to an entity under a named metric key.",
-    promptSnippet: "Attach a numeric score to an entity",
-    parameters: Type.Object({
-      entity_id: Type.String({ description: "Entity to score" }),
-      score_value: Type.Number({ description: "Numeric score value" }),
-      score_type: Type.String({ description: "Metric name" }),
-    }),
-    async execute(_id, params: any) {
-      const r = graph.score(params.entity_id, params.score_value, params.score_type);
-      if (!r.ok) return errorText(r.error);
-      persistGraphFn();
-      return okText(`Scored: ${params.entity_id} ${params.score_type}=${params.score_value}`, { action: "score", entity: graph.getEntity(params.entity_id) });
-    },
-  });
-
-  // ── esr_promote_task ───────────────────────────────────
-
-  pi.registerTool({
-    name: "esr_promote_task",
-    label: "ESR Promote Task",
-    description: "Promote a Task entity to 'active' or 'stable' state.",
-    promptSnippet: "Promote a task entity to active or stable state",
-    parameters: Type.Object({
-      entity_id: Type.String({ description: "Task entity to promote" }),
-      new_state: StringEnum(["active", "stable"] as const),
-    }),
-    async execute(_id, params: any) {
-      const r = graph.promoteTask(params.entity_id, params.new_state);
-      if (!r.ok) return errorText(r.error);
-      persistGraphFn();
-      return okText(`Promoted task: ${params.entity_id} -> ${params.new_state}`, { action: "promote_task", entity: graph.getEntity(params.entity_id) });
-    },
-  });
-
   // ── esr_update_artifact ────────────────────────────────
 
   pi.registerTool({
@@ -206,25 +166,6 @@ export async function registerTools(
       persistGraphFn();
       const artifact = graph.getArtifact(params.id)!;
       return okText(`Updated artifact: ${artifact.id} [${artifact.type}] v${artifact.version} (${artifact.sections.length} sections)`, { action: "update_artifact", artifact });
-    },
-  });
-
-  // ── esr_apply_constraint ───────────────────────────────
-
-  pi.registerTool({
-    name: "esr_apply_constraint",
-    label: "ESR Apply Constraint",
-    description: "Apply a constraint to an entity.",
-    promptSnippet: "Apply a constraint to an entity",
-    parameters: Type.Object({
-      entity_id: Type.String({ description: "Entity the constraint applies to" }),
-      constraint_description: Type.String({ description: "Description of the constraint" }),
-    }),
-    async execute(_id, params: any) {
-      const r = graph.applyConstraint(params.entity_id, params.constraint_description);
-      if (!r.ok) return errorText(r.error);
-      persistGraphFn();
-      return okText(`Applied constraint to ${params.entity_id}: ${params.constraint_description}`, { action: "apply_constraint", description: params.constraint_description });
     },
   });
 
@@ -296,15 +237,14 @@ export async function registerTools(
     promptSnippet: "List ESR domain packs",
     parameters: Type.Object({}),
     async execute() {
-      const packList = packRegistry.list();
       const text = [
-        `Available packs (${packList.length}):`,
-        ...packList.map((pack) => `- ${pack.name}@${pack.version}${pack.description ? `: ${pack.description}` : ""}`),
+        `Available packs (${packs.length}):`,
+        ...packs.map((pack: any) => `- ${pack.name}@${pack.version}${pack.description ? `: ${pack.description}` : ""}`),
       ].join("\n");
       return okText(text, {
         action: "list_packs",
-        count: packList.length,
-        packs: packList.map((pack) => ({
+        count: packs.length,
+        packs: packs.map((pack: any) => ({
           name: pack.name,
           version: pack.version,
           description: pack.description,
@@ -425,6 +365,123 @@ export async function registerTools(
         remediation_items: plan.remediationItems,
         gaps: plan.gaps,
       });
+    },
+  });
+
+  // ── esr_complete_task ─────────────────────────────────
+
+  pi.registerTool({
+    name: "esr_complete_task",
+    label: "ESR Complete Task",
+    description:
+      "Complete a task in one call — records artifacts, evaluation, optional memory ref, then validates closure and promotes to stable if ready.",
+    promptSnippet: "Complete a task: record artifacts + evaluation → promote to stable",
+    promptGuidelines: [
+      "Use esr_complete_task as the primary way to close a task. It combines artifact recording, evaluation, closure validation, and promotion into a single call.",
+      "Prefer this over calling esr_update_artifact + esr_evaluate + esr_update_state separately.",
+    ],
+    parameters: Type.Object({
+      task_id: Type.String({ description: "Task entity ID to complete" }),
+      artifacts: Type.Array(Type.Object({
+        id: Type.String({ description: "Artifact identifier (e.g. file path)" }),
+        type: StringEnum(["document", "code", "report", "spec"] as const),
+        sections: Type.Array(Type.Object({
+          name: Type.String({ description: "Section name" }),
+          state: StringEnum(["draft", "editing", "stable", "invalid"] as const),
+        })),
+      })),
+      evaluation: Type.Object({
+        evaluator: Type.String({ description: "Evaluator entity ID (create an Actor entity first)" }),
+        confidence: Type.Number({ description: "Confidence 0.0-1.0" }),
+        metrics: Type.Optional(Type.Record(Type.String(), Type.Number(), { description: "e.g. test_count, typecheck_errors, lines_changed" })),
+      }),
+      memory_ref: Type.Optional(Type.Object({
+        provider: Type.String({ description: "Memory provider name, e.g. pi-loom or claude-mem" }),
+        ref_id: Type.String({ description: "External memory reference ID" }),
+        kind: StringEnum(["summary", "decision", "incident", "note"] as const),
+        title: Type.Optional(Type.String({ description: "Short human-readable title" })),
+      })),
+      constraints: Type.Optional(Type.Array(
+        Type.String({ description: "Constraint description to apply before closure validation" }),
+      )),
+    }),
+    async execute(_id, params: any) {
+      const task = graph.getEntity(params.task_id);
+      if (!task) return errorText(`Task not found: ${params.task_id}`);
+
+      const steps: string[] = [];
+
+      // 1. Record every artifact + produces relation
+      for (const artifact of params.artifacts) {
+        const result = graph.upsertArtifact({
+          id: artifact.id,
+          type: artifact.type,
+          sections: artifact.sections.map((s: any) => ({ name: s.name, state: s.state })),
+        });
+        if (!result.ok) return errorText(`Artifact ${artifact.id}: ${result.error}`);
+        steps.push(`artifact: ${artifact.id} [${artifact.type}]`);
+
+        const linkResult = graph.linkRelation(params.task_id, artifact.id, "produces");
+        if (!linkResult.ok && !linkResult.error.includes("already exists")) {
+          return errorText(`Link produces ${artifact.id}: ${linkResult.error}`);
+        }
+      }
+
+      // 2. Record evaluation
+      const evalResult = graph.evaluate(
+        params.task_id,
+        params.evaluation.evaluator,
+        params.evaluation.confidence,
+        params.evaluation.metrics ?? {},
+      );
+      if (!evalResult.ok) return errorText(`Evaluation: ${evalResult.error}`);
+      steps.push(`evaluation: conf=${params.evaluation.confidence.toFixed(2)}`);
+
+      // 3. Optional memory reference
+      if (params.memory_ref) {
+        const refResult = graph.attachMemoryRef(params.task_id, {
+          ref_id: params.memory_ref.ref_id,
+          provider: params.memory_ref.provider,
+          entity_id: params.task_id,
+          kind: params.memory_ref.kind,
+          title: params.memory_ref.title,
+          created_at: new Date().toISOString(),
+        });
+        if (!refResult.ok && !refResult.error.includes("already attached")) {
+          return errorText(`Memory ref: ${refResult.error}`);
+        }
+        steps.push(`memory_ref: ${params.memory_ref.provider}:${params.memory_ref.ref_id}`);
+      }
+
+      // 3b. Optional constraints
+      if (params.constraints) {
+        for (const desc of params.constraints) {
+          const cResult = graph.applyConstraint(params.task_id, String(desc));
+          if (!cResult.ok) return errorText(`Constraint "${desc}": ${cResult.error}`);
+          steps.push(`constraint: ${String(desc)}`);
+        }
+      }
+
+      // 4. Validate closure
+      const closureStatus = getClosureStatus(graph, params.task_id);
+      if (!closureStatus.ready_for_stable) {
+        return okText(
+          `Task ${params.task_id}: steps completed but closure not ready. Missing: ${closureStatus.missing.join(", ")}`,
+          { action: "complete_task", task_id: params.task_id, steps, closure: closureStatus, promoted: false },
+        );
+      }
+
+      // 5. Promote to stable
+      const promoteResult = graph.promoteTask(params.task_id, "stable");
+      if (!promoteResult.ok) return errorText(`Promote: ${promoteResult.error}`);
+      steps.push("promoted to stable");
+
+      persistGraphFn();
+
+      return okText(
+        `Completed task: ${params.task_id} → stable (${steps.join(", ")})`,
+        { action: "complete_task", task_id: params.task_id, steps, closure: closureStatus, promoted: true },
+      );
     },
   });
 
@@ -607,7 +664,7 @@ export async function registerTools(
     parameters: Type.Object({
       from: Type.String({ description: "Source entity ID" }),
       to: Type.String({ description: "Target entity ID" }),
-      type: StringEnum(["depends_on", "part_of", "implements", "supports", "contradicts", "refines", "evaluates", "scores", "validates", "triggers", "updates", "blocks", "produces"] as const),
+      type: StringEnum(["depends_on", "produces", "validates", "blocks", "refines", "evaluates"] as const),
     }),
     async execute(_id, params: any) {
       const r = graph.removeRelation(params.from, params.to, params.type);

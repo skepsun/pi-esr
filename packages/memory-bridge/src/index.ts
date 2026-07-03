@@ -21,6 +21,9 @@ export type { ESRMemoryProvider } from "./provider.js";
 
 export { detectMemoryCapabilities } from "./detect.js";
 export { createMemoryProvider } from "./factory.js";
+export { HostMemoryProvider } from "./host-provider.js";
+export type { HostMemoryDelegate } from "./host-provider.js";
 export { NullMemoryProvider } from "./null-provider.js";
 export { selectMemoryProvider } from "./select.js";
 export { SqliteMemoryProvider } from "./sqlite-provider.js";
+export { tryCreateLoomDelegate } from "./loom-delegate.js";

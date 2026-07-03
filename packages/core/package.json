@@ -1,6 +1,6 @@
 {
   "name": "@pi-esr/core",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "description": "Constrained semantic graph state machine — zero framework dependencies",
   "type": "module",
   "main": "./dist/index.js",

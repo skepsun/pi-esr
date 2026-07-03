@@ -15,13 +15,14 @@ export type {
   ESRArtifactSection, ESRPersistedState,
   ESRMemoryRefSummary,
   ArtifactType, SectionState,
+  ESREvaluationRecord,
   Result,
 } from "./types.js";
 
 // ── Core state machine ────────────────────────────────────
 export { ESRGraph } from "./graph.js";
 export { buildStableSnapshot, buildGraphFingerprint, buildESRContext } from "./context.js";
-export { getClosureStatus, listClosureGaps, listTasks } from "./closure.js";
+export { getClosureStatus, listClosureGaps, listTasks, loadClosurePolicy, resetClosurePolicy } from "./closure.js";
 export type {
   ESRClosurePolicy,
   ESRClosureGapItem,

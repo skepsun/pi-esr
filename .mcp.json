@@ -2,7 +2,7 @@
   "mcpServers": {
     "pi-esr": {
       "command": "node",
-      "args": ["packages/adapter-mcp/dist/server.js"],
+      "args": ["dist/esr-mcp.js"],
       "env": {
         "ESR_STORE_PATH": ".pi-esr-memory"
       }

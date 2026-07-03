@@ -315,11 +315,11 @@ describe("Artifact", () => {
     const g = new ESRGraph();
     g.upsertArtifact({ id: "report-1", type: "report", sections: [{ name: "summary", state: "draft" }] });
 
-    // Auto-created Artifact entity proxy
+    // Auto-created Artifact entity proxy — state reflects sections (draft → active)
     const proxy = g.getEntity("report-1");
     expect(proxy).toBeDefined();
     expect(proxy!.role).toBe("Artifact");
-    expect(proxy!.state).toBe("stable");
+    expect(proxy!.state).toBe("active");
     expect(proxy!.confidence).toBe(1.0);
     expect(proxy!.metrics.version).toBe(1);
     expect(proxy!.label).toContain("report-1");
@@ -373,7 +373,8 @@ describe("Serialization", () => {
 
     const state = g1.toPersistedState();
     const g2 = new ESRGraph();
-    g2.loadFromState(state);
+    const loadResult = g2.loadFromState(state);
+    expect(loadResult.ok).toBe(true);
 
     expect(g2.getAllEntities()).toHaveLength(3); // 2 user + 1 artifact auto-proxy
     expect(g2.getAllRelations()).toHaveLength(1);

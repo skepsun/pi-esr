@@ -49,6 +49,11 @@ const FILE_RULES = [
     confidence: 0.5,
     note: "ESR local persistence directory found",
   },
+  {
+    relPath: ".pi-loom",
+    confidence: 0.85,
+    note: "pi-loom memory database directory found",
+  },
 ];
 
 const POSITIVE_TOOL_PATTERNS = [
@@ -71,6 +76,7 @@ const KNOWN_MEMORY_PACKAGES = [
   "pi-memory",
   "claude-mem",
   "@pi/pi-memory",
+  "pi-loom",
 ];
 
 export function detectMemoryCapabilities(ctx: DetectionContext): MemoryCapabilityReport {
