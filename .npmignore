@@ -18,10 +18,12 @@ esr-state.json
 .openclaw/
 .codex/
 
-# Keep packages/ out of npm — pi's workspace scanner loads them as extensions
+# Keep packages/ and unbundled extensions out of npm
+# dist/pi-extension.js is the self-contained bundle
 packages/
+dist/extensions/
 
-# Exclude source, only publish dist outputs
-/extensions/
-/tests/
-/src/
+# Exclude source
+extensions/
+tests/
+src/
