@@ -549,8 +549,8 @@ function pluginInstallCodex(): SetupResult {
 
 function pluginInstallPi(): SetupResult {
   if (!which("pi")) return { agent: "Pi Agent", status: "error", message: "pi CLI not found" };
-  // cli.js is at packages/cli/dist/cli.js — root package is 3 levels up
-  const rootDir = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+  // cli.js is at dist/cli.js — root package is 2 levels up
+  const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
   // In npm installs, dist/extensions/index.js exists at root. In dev, fall back to findPluginDir.
   const installDir = existsSync(join(rootDir, "dist", "extensions", "index.js"))
     ? rootDir
