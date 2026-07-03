@@ -42,7 +42,7 @@ If you prefer manual setup, the MCP server still exposes `esr-system-prompt` via
 
 ```bash
 git clone https://github.com/skepsun/pi-esr.git && cd pi-esr && npm install
-npm test                    # 111 tests
+npm test                    # 153 tests
 npm run typecheck           # Zero errors
 ```
 
@@ -220,10 +220,10 @@ tests/
 
 ## Validation
 
-### Correctness (111 tests, 8 test files)
+### Correctness (153 tests, 11 test files)
 
 ```bash
-npm test                    # 111 tests, <1s
+npm test                    # 153 tests, <1s
 npm run typecheck           # tsc --noEmit, zero errors
 ```
 

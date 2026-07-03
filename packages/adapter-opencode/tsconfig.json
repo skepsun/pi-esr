@@ -10,9 +10,12 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "dist",
-    "rootDir": "..",
+    "rootDir": "../..",
     "declaration": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@pi-esr/core": ["../core/src"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]

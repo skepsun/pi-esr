@@ -7,12 +7,78 @@
  *
  * Or with Cursor / any MCP-compatible client via stdio transport.
  *
- * Registers 15 ESR tools + `esr://context` resource.
- * Persists state to `.pi-esr-memory/esr-state.json` on every mutation.
+ * Registers ESR tools + `esr://context` resource.
+ * Uses SQLite as the runtime state source and mirrors JSON snapshots for compatibility.
  */
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createRequire } from "node:module";
+
+// ── Health check mode ───────────────────────────────────
+
+if (process.argv.includes("--check")) {
+  const _require = createRequire(import.meta.url);
+  const checks: Array<{ name: string; ok: boolean; detail: string }> = [];
+
+  // Check 1: Node.js version
+  const nodeVersion = process.version;
+  const nodeMajor = parseInt(nodeVersion.slice(1).split(".")[0], 10);
+  checks.push({ name: "Node.js", ok: nodeMajor >= 18, detail: `v${nodeVersion} (requires >=18)` });
+
+  // Check 2: better-sqlite3
+  try {
+    _require.resolve("better-sqlite3");
+    checks.push({ name: "better-sqlite3", ok: true, detail: "available" });
+  } catch {
+    checks.push({ name: "better-sqlite3", ok: false, detail: "NOT FOUND — run: npm install better-sqlite3" });
+  }
+
+  // Check 3: @modelcontextprotocol/sdk
+  try {
+    _require.resolve("@modelcontextprotocol/sdk/server/mcp.js");
+    checks.push({ name: "@modelcontextprotocol/sdk", ok: true, detail: "available" });
+  } catch {
+    checks.push({ name: "@modelcontextprotocol/sdk", ok: false, detail: "NOT FOUND — MCP transport unavailable" });
+  }
+
+  // Check 4: esr-state.json
+  try {
+    const statePath = join(process.cwd(), process.env.ESR_STORE_PATH ?? ".pi-esr-memory", "esr-state.json");
+    const fs = await import("node:fs");
+    const stat = fs.statSync(statePath, { throwIfNoEntry: false });
+    if (stat) {
+      const content = fs.readFileSync(statePath, "utf-8");
+      const parsed = JSON.parse(content);
+      checks.push({ name: "esr-state.json", ok: true, detail: `${(content.length / 1024).toFixed(1)}KB, ${parsed.entities?.length ?? 0} entities` });
+    } else {
+      checks.push({ name: "esr-state.json", ok: true, detail: "not found (will create on first use)" });
+    }
+  } catch (err: any) {
+    checks.push({ name: "esr-state.json", ok: false, detail: `error: ${err.message}` });
+  }
+
+  // Check 5: Tool list
+  try {
+    const toolsModule = await import("./tools.js");
+    const toolNames = Object.keys(toolsModule.TOOLS);
+    checks.push({ name: "ESR tools", ok: toolNames.length > 0, detail: `${toolNames.length} registered: ${toolNames.slice(0, 8).join(", ")}${toolNames.length > 8 ? "..." : ""}` });
+  } catch (err: any) {
+    checks.push({ name: "ESR tools", ok: false, detail: `import error: ${err.message}` });
+  }
+
+  // Output
+  const allOk = checks.every(c => c.ok);
+  for (const c of checks) {
+    const icon = c.ok ? "✅" : "❌";
+    console.error(`${icon} ${c.name}: ${c.detail}`);
+  }
+  console.error(allOk ? "\n✅ All checks passed." : "\n❌ Some checks failed.");
+  process.exit(allOk ? 0 : 1);
+}
+
+// ── Normal MCP server mode ──────────────────────────────
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { MemoryStore } from "../../core/src/store.js";
@@ -28,8 +94,8 @@ import {
   ESRGraph,
   SqliteESRRepository,
 } from "@pi-esr/core";
-import { TOOLS, init, isMutation, getContextText } from "./tools";
-import { load, persist } from "./persistence";
+import { TOOLS, init, getContextText } from "./tools";
+import { load } from "./persistence";
 
 function readRootPackageJson(): {
   dependencies?: Record<string, string>;
@@ -58,7 +124,10 @@ const memoryReport = detectMemoryCapabilities({
 const selectedMemoryProvider = selectMemoryProvider(memoryReport);
 
 const prior = load();
-if (prior) graph.loadFromState(prior);
+if (prior) {
+  const loadResult = graph.loadFromState(prior);
+  if (!loadResult.ok) console.error("[pi-esr] Failed to load prior state:", loadResult.error);
+}
 const repository = new SqliteESRRepository(undefined, prior ?? undefined);
 
 let memory: ESRMemoryProvider = new NullMemoryProvider();
@@ -103,13 +172,10 @@ for (const [name, tool] of Object.entries(TOOLS)) {
     name,
     {
       description: toolNameToDescription(name),
-      inputSchema: tool.schema,
+      inputSchema: tool.schema as any,
     },
     async (args: any) => {
       const text = await tool.handler(args);
-      if (isMutation(name)) {
-        persist(graph.toPersistedState());
-      }
       return { content: [{ type: "text" as const, text }] };
     },
   );
@@ -139,6 +205,8 @@ server.registerResource(
 // Embedded copy of prompts/esr.md — allows MCP clients to discover
 // the ESR methodology without needing the source file on disk.
 const ESR_SYSTEM_PROMPT = `You have access to ESR (Engineering State Runtime) tools. Use them to structure your work into entities, typed relations, and explicit state transitions.
+
+**IMPORTANT — MCP vs Pi Extension**: When running as an MCP server (Claude Code, Cursor, etc.), you MUST explicitly call ESR tools for state tracking. Unlike the Pi Agent extension, the MCP path has no automatic file-change capture, no automatic test-result evaluation, and no automatic task creation. Every entity, artifact, evaluation, and state transition requires your explicit esr_* tool call. Start every session with esr_get_context() to load current state.
 
 ## Core Ontology
 
@@ -267,6 +335,8 @@ function toolNameToDescription(name: string): string {
     esr_mem_recall: "Recall memories by entity or text search.",
     esr_mem_timeline: "Chronological timeline for entity.",
     esr_mem_journal: "View/record state transition journal.",
+    esr_complete_task: "Complete a task: record artifacts + evaluation → promote to stable.",
+    esr_stack_status: "Unified health: pi-esr + pi-loom + context-mode layer status.",
   };
   return descriptions[name] ?? name;
 }

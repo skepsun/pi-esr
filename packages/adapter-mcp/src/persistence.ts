@@ -7,19 +7,43 @@
  * Override with ESR_SNAPSHOT_PATH env var.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join, dirname, resolve, parse } from "node:path";
 import type { ESRPersistedState } from "@pi-esr/core";
 
-const SNAPSHOT_PATH =
-  process.env.ESR_SNAPSHOT_PATH ?? join(process.cwd(), ".pi-esr-memory", "esr-state.json");
+export type PersistResult = { ok: true } | { ok: false; error: string };
 
-export function persist(state: ESRPersistedState): void {
+function defaultSnapshotPath(): string {
+  return join(process.cwd(), ".pi-esr-memory", "esr-state.json");
+}
+
+export function persist(state: ESRPersistedState): PersistResult {
   // Write to the existing file location if found, otherwise to default path
   const existing = findStateFile();
-  const targetPath = existing ?? join(process.cwd(), ".pi-esr-memory", "esr-state.json");
-  mkdirSync(dirname(targetPath), { recursive: true });
-  writeFileSync(targetPath, JSON.stringify(state, null, 2), "utf-8");
+  const targetPath = existing ?? defaultSnapshotPath();
+  const stateDir = dirname(targetPath);
+
+  try {
+    mkdirSync(stateDir, { recursive: true });
+  } catch (error) {
+    return { ok: false, error: formatError("create snapshot directory", error) };
+  }
+
+  const lockPath = join(stateDir, "esr-state.json.lock");
+  try {
+    writeFileSync(lockPath, String(process.pid), { flag: "wx" });
+  } catch (error) {
+    return { ok: false, error: formatError(`acquire snapshot lock ${lockPath}`, error) };
+  }
+
+  try {
+    writeFileSync(targetPath, JSON.stringify(state, null, 2), "utf-8");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: formatError(`write snapshot ${targetPath}`, error) };
+  } finally {
+    try { unlinkSync(lockPath); } catch { /* ignore */ }
+  }
 }
 
 function isValidState(data: unknown): data is ESRPersistedState {
@@ -46,7 +70,7 @@ function tryLoadPath(path: string): ESRPersistedState | null {
 
 function findStateFile(): string | null {
   // 1. ESR_SNAPSHOT_PATH env var
-  if (process.env.ESR_SNAPSHOT_PATH && existsSync(process.env.ESR_SNAPSHOT_PATH)) {
+  if (process.env.ESR_SNAPSHOT_PATH) {
     return process.env.ESR_SNAPSHOT_PATH;
   }
 
@@ -66,11 +90,16 @@ function findStateFile(): string | null {
   }
 
   // 3. Fall back to cwd (file won't exist, but persist will create it)
-  return SNAPSHOT_PATH;
+  return defaultSnapshotPath();
 }
 
 export function load(): ESRPersistedState | null {
   const filePath = findStateFile();
   if (!filePath) return null;
   return tryLoadPath(filePath);
+}
+
+function formatError(action: string, error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return `${action} failed: ${message}`;
 }

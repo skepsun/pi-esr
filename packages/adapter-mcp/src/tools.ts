@@ -10,7 +10,7 @@ import { buildPackApplyPlan, createRegistry, detectBestPack } from "../../domain
 import type { ESRMemoryProvider } from "../../memory-bridge/src/index.js";
 import { SqliteMemoryProvider } from "../../memory-bridge/src/index.js";
 import { buildJournalSummary } from "../../core/src/journal.js";
-import { buildActiveMemoryContext, formatObservation } from "../../core/src/recall.js";
+import { buildActiveMemoryContext } from "../../core/src/recall.js";
 import { MemoryStore } from "../../core/src/store.js";
 import {
   ESRGraph,
@@ -20,13 +20,14 @@ import {
   listClosureGaps,
   listTasks,
 } from "@pi-esr/core";
-import { persist } from "./persistence";
+import { McpStateService } from "./state-service";
 
 // ── State holders ──────────────────────────────────────
 
 let graph: ESRGraph;
 let memory: ESRMemoryProvider = new SqliteMemoryProvider(new MemoryStore(":memory:"));
 let repository: SqliteESRRepository;
+let stateService: McpStateService;
 
 export function init(
   g: ESRGraph,
@@ -36,11 +37,17 @@ export function init(
   graph = g;
   memory = mem;
   repository = repo;
+  stateService = new McpStateService(graph, repository);
 }
 
-function onMutated(): void {
-  repository.syncFromGraph(graph.toPersistedState());
-  persist(graph.toPersistedState());
+function finishGraphMutation(successText: string): string {
+  const result = stateService.commitGraphMutation();
+  return result.ok ? successText : `ERROR: ${result.error}`;
+}
+
+function finishRepositoryMutation(successText: string): string {
+  const result = stateService.commitRepositoryMutation();
+  return result.ok ? successText : `ERROR: ${result.error}`;
 }
 
 // ── Tool registry ──────────────────────────────────────
@@ -55,7 +62,6 @@ const RelationType = z.enum([
   "evaluates", "scores", "validates",
   "triggers", "updates", "blocks", "produces",
 ]);
-const TaskState = z.enum(["active", "stable"]);
 const JournalAction = z.enum(["view", "record"]);
 const { registry: packRegistry } = await createRegistry();
 const packs = packRegistry.list();
@@ -88,8 +94,7 @@ export const TOOLS: Record<string, ToolEntry> = {
         updated_at: new Date().toISOString(),
       });
       if (!r.ok) return `ERROR: ${r.error}`;
-      onMutated();
-      return `Created entity: ${args.entity_id}`;
+      return finishGraphMutation(`Created entity: ${args.entity_id}`);
     },
   },
 
@@ -111,7 +116,8 @@ export const TOOLS: Record<string, ToolEntry> = {
       }
 
       const probe = new ESRGraph();
-      probe.loadFromState(graph.toPersistedState());
+      const probeLoadResult = probe.loadFromState(graph.toPersistedState());
+      if (!probeLoadResult.ok) return `ERROR: internal state invalid: ${probeLoadResult.error}`;
       const probeResult = probe.updateEntityState(
         entityId,
         ((args.state as any) ?? current.state) as never,
@@ -136,9 +142,7 @@ export const TOOLS: Record<string, ToolEntry> = {
         return `ERROR: ${result.error}`;
       }
 
-      graph.loadFromState(repository.loadGraph());
-      onMutated();
-      return `Updated: ${entityId} state=${result.value.state} confidence=${result.value.confidence.toFixed(2)} version=${result.value.version} revision=${result.revision}`;
+      return finishRepositoryMutation(`Updated: ${entityId} state=${result.value.state} confidence=${result.value.confidence.toFixed(2)} version=${result.value.version} revision=${result.revision}`);
     },
   },
 
@@ -151,8 +155,7 @@ export const TOOLS: Record<string, ToolEntry> = {
     handler: async (args) => {
       const r = graph.linkRelation(args.from as string, args.to as string, args.type as any);
       if (!r.ok) return `ERROR: ${r.error}`;
-      onMutated();
-      return `Linked: ${args.from} --[${args.type}]--> ${args.to}`;
+      return finishGraphMutation(`Linked: ${args.from} --[${args.type}]--> ${args.to}`);
     },
   },
 
@@ -169,35 +172,7 @@ export const TOOLS: Record<string, ToolEntry> = {
         args.confidence as number, (args.metrics as Record<string, number>) ?? {},
       );
       if (!r.ok) return `ERROR: ${r.error}`;
-      onMutated();
-      return `Evaluated: ${args.entity_id} by ${args.evaluator} confidence=${(args.confidence as number).toFixed(2)}`;
-    },
-  },
-
-  esr_score: {
-    schema: z.object({
-      entity_id: z.string(),
-      score_value: z.number(),
-      score_type: z.string(),
-    }),
-    handler: async (args) => {
-      const r = graph.score(args.entity_id as string, args.score_value as number, args.score_type as string);
-      if (!r.ok) return `ERROR: ${r.error}`;
-      onMutated();
-      return `Scored: ${args.entity_id} ${args.score_type}=${args.score_value}`;
-    },
-  },
-
-  esr_promote_task: {
-    schema: z.object({
-      entity_id: z.string(),
-      new_state: TaskState,
-    }),
-    handler: async (args) => {
-      const r = graph.promoteTask(args.entity_id as string, args.new_state as "active" | "stable");
-      if (!r.ok) return `ERROR: ${r.error}`;
-      onMutated();
-      return `Promoted task: ${args.entity_id} -> ${args.new_state}`;
+      return finishGraphMutation(`Evaluated: ${args.entity_id} by ${args.evaluator} confidence=${(args.confidence as number).toFixed(2)}`);
     },
   },
 
@@ -220,21 +195,7 @@ export const TOOLS: Record<string, ToolEntry> = {
         sections: sections.map(s => ({ name: s.name, state: s.state as any })),
       });
       if (!r.ok) return `ERROR: ${r.error}`;
-      onMutated();
-      return `Updated artifact: ${args.id} [${args.type}]`;
-    },
-  },
-
-  esr_apply_constraint: {
-    schema: z.object({
-      entity_id: z.string(),
-      constraint_description: z.string(),
-    }),
-    handler: async (args) => {
-      const r = graph.applyConstraint(args.entity_id as string, args.constraint_description as string);
-      if (!r.ok) return `ERROR: ${r.error}`;
-      onMutated();
-      return `Applied constraint to ${args.entity_id}: ${args.constraint_description}`;
+      return finishGraphMutation(`Updated artifact: ${args.id} [${args.type}]`);
     },
   },
 
@@ -378,8 +339,107 @@ export const TOOLS: Record<string, ToolEntry> = {
         }
       }
 
-      onMutated();
-      return `Expanded with pack: ${pack.name} checks=${plan.checks.length} gaps=${plan.gaps.join(",") || "none"}`;
+      return finishGraphMutation(`Expanded with pack: ${pack.name} checks=${plan.checks?.length ?? 0} gaps=${plan.gaps.join(",") || "none"}`);
+    },
+  },
+
+  esr_complete_task: {
+    schema: z.object({
+      task_id: z.string(),
+      artifacts: z.array(z.object({
+        id: z.string(),
+        type: ArtifactType,
+        sections: z.array(z.object({
+          name: z.string(),
+          state: z.enum(["draft", "editing", "stable", "invalid"]),
+        })),
+      })),
+      evaluation: z.object({
+        evaluator: z.string(),
+        confidence: z.number().min(0).max(1),
+        metrics: z.record(z.string(), z.number()).optional(),
+      }),
+      memory_ref: z.object({
+        provider: z.string(),
+        ref_id: z.string(),
+        kind: z.enum(["summary", "decision", "incident", "note"]),
+        title: z.string().optional(),
+      }).optional(),
+      constraints: z.array(z.string()).optional(),
+    }),
+    handler: async (args) => {
+      const taskId = args.task_id as string;
+      const task = graph.getEntity(taskId);
+      if (!task) return `ERROR: Task not found: ${taskId}`;
+
+      const steps: string[] = [];
+
+      // 1. Record every artifact + produces relation
+      for (const artifact of (args.artifacts as any[])) {
+        const result = graph.upsertArtifact({
+          id: artifact.id,
+          type: artifact.type as "document" | "code" | "report" | "spec",
+          sections: (artifact.sections as any[]).map((s: any) => ({ name: s.name as string, state: s.state as any })),
+        });
+        if (!result.ok) return `ERROR: Artifact ${artifact.id}: ${result.error}`;
+        steps.push(`artifact: ${artifact.id}`);
+
+        const linkResult = graph.linkRelation(taskId, artifact.id as string, "produces");
+        if (!linkResult.ok && !linkResult.error.includes("already exists")) {
+          return `ERROR: Link produces ${artifact.id}: ${linkResult.error}`;
+        }
+      }
+
+      // 2. Record evaluation
+      const evalArgs = args.evaluation as any;
+      const evalResult = graph.evaluate(
+        taskId,
+        evalArgs.evaluator,
+        evalArgs.confidence,
+        evalArgs.metrics ?? {},
+      );
+      if (!evalResult.ok) return `ERROR: Evaluation: ${evalResult.error}`;
+      steps.push(`evaluation: conf=${evalArgs.confidence.toFixed(2)}`);
+
+      // 3. Optional memory ref
+      if (args.memory_ref) {
+        const refArgs = args.memory_ref as any;
+        const refResult = graph.attachMemoryRef(taskId, {
+          ref_id: refArgs.ref_id,
+          provider: refArgs.provider,
+          entity_id: taskId,
+          kind: refArgs.kind,
+          title: refArgs.title,
+          created_at: new Date().toISOString(),
+        });
+        if (!refResult.ok && !refResult.error.includes("already attached")) {
+          return `ERROR: Memory ref: ${refResult.error}`;
+        }
+        steps.push(`memory_ref: ${refArgs.provider}:${refArgs.ref_id}`);
+      }
+
+      // 3b. Optional constraints
+      if (args.constraints) {
+        for (const desc of args.constraints as string[]) {
+          const cResult = graph.applyConstraint(taskId, desc);
+          if (!cResult.ok) return `ERROR: Constraint "${desc}": ${cResult.error}`;
+          steps.push(`constraint: ${desc}`);
+        }
+      }
+
+      // 4. Validate closure
+      const closureStatus = getClosureStatus(graph, taskId);
+      if (!closureStatus.ready_for_stable) {
+        return `Task ${taskId}: steps completed but closure not ready. Missing: ${closureStatus.missing.join(", ")}
+  Steps: ${steps.join(", ")}`;
+      }
+
+      // 5. Promote to stable
+      const promoteResult = graph.promoteTask(taskId, "stable");
+      if (!promoteResult.ok) return `ERROR: ${promoteResult.error}`;
+      steps.push("promoted to stable");
+
+      return finishGraphMutation(`Completed task: ${taskId} → stable (${steps.join(", ")})`);
     },
   },
 
@@ -423,8 +483,7 @@ export const TOOLS: Record<string, ToolEntry> = {
         created_at: (args.created_at as string | undefined) ?? new Date().toISOString(),
       });
       if (!result.ok) return `ERROR: ${result.error}`;
-      onMutated();
-      return `Attached memory ref ${args.provider}:${args.ref_id} to ${args.entity_id}`;
+      return finishGraphMutation(`Attached memory ref ${args.provider}:${args.ref_id} to ${args.entity_id}`);
     },
   },
 
@@ -481,8 +540,7 @@ export const TOOLS: Record<string, ToolEntry> = {
     handler: async (args) => {
       const r = graph.removeEntity(args.entity_id as string);
       if (!r.ok) return `ERROR: ${r.error}`;
-      onMutated();
-      return `Removed entity: ${args.entity_id} (relations cascade-deleted)`;
+      return finishGraphMutation(`Removed entity: ${args.entity_id} (relations cascade-deleted)`);
     },
   },
 
@@ -495,8 +553,7 @@ export const TOOLS: Record<string, ToolEntry> = {
     handler: async (args) => {
       const r = graph.removeRelation(args.from as string, args.to as string, args.type as any);
       if (!r.ok) return `ERROR: ${r.error}`;
-      onMutated();
-      return `Removed relation: ${args.from} --[${args.type}]--> ${args.to}`;
+      return finishGraphMutation(`Removed relation: ${args.from} --[${args.type}]--> ${args.to}`);
     },
   },
 
@@ -605,12 +662,54 @@ export const TOOLS: Record<string, ToolEntry> = {
       return entries.map(e => `[${e.entity_id}] ${e.created_at.slice(0, 16)}: ${e.transition}`).join("\n");
     },
   },
+
+  esr_stack_status: {
+    schema: z.object({}),
+    handler: async () => {
+      const layers: string[] = [];
+
+      // Layer 3: pi-esr
+      const entities = graph.getAllEntities();
+      const tasks = entities.filter(e => e.role === "Task");
+      const stable = tasks.filter(e => e.state === "stable").length;
+      const active = tasks.filter(e => e.state === "active").length;
+      const artifacts = graph.getAllArtifacts().length;
+      const relations = graph.getAllRelations().length;
+      const memoryRefs = graph.getAllMemoryRefs().length;
+
+      layers.push(`[pi-esr]`);
+      layers.push(`  entities: ${entities.length} (tasks: ${tasks.length}, stable: ${stable}, active: ${active})`);
+      layers.push(`  artifacts: ${artifacts}, relations: ${relations}, memory_refs: ${memoryRefs}`);
+      layers.push(`  state snapshot: ${entities.length > 0 ? "loaded" : "fresh"}`);
+
+      // Layer 2: pi-loom (via memory provider)
+      const memAvailable = await memory.isAvailable();
+      if (memAvailable) {
+        const memCount = await memory.count();
+        layers.push(`[pi-loom]`);
+        layers.push(`  memories: ${memCount}, provider: ${memory.name}`);
+      } else {
+        layers.push(`[pi-loom]: not available (provider: ${memory.name})`);
+      }
+
+      // Layer 1: context-mode (not detectable from MCP side, note)
+      layers.push(`[context-mode]`);
+      layers.push(`  status: check ctx_stats in pi for detailed stats`);
+
+      // Summary
+      layers.push("");
+      const overall = tasks.length > 0 ? `Active: ${tasks.length} tasks (${stable} stable, ${active} in progress)` : "No tasks tracked";
+      layers.push(`Summary: ${overall}`);
+
+      return layers.join("\n");
+    },
+  },
 };
 
 // ── Helpers ─────────────────────────────────────────────
 
 export function isMutation(name: string): boolean {
-  return !["esr_get_context", "esr_get_closure_status", "esr_list_closure_gaps", "esr_mem_recall", "esr_mem_timeline", "esr_mem_journal"].includes(name);
+  return !["esr_get_context", "esr_get_closure_status", "esr_list_closure_gaps", "esr_list_tasks", "esr_mem_recall", "esr_mem_timeline", "esr_mem_journal", "esr_stack_status"].includes(name);
 }
 
 export function getContextText(): string {
