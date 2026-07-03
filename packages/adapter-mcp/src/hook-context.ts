@@ -176,11 +176,30 @@ function sortRelations(relations: MinimalRelation[]): MinimalRelation[] {
 export function buildMethodology(): string {
   return [
     "",
-    "ESR Quick Reference",
-    "──────────────────────",
+    "ESR Operating Protocol for Codex",
+    "────────────────────────────────",
+    "",
+    "Use ESR for every non-trivial coding task, refactor, bugfix, test run, file edit, or architecture decision.",
+    "Tool names may appear as either esr_* or mcp__pi-esr__esr_* in Codex. Use the available pi-esr MCP tools.",
+    "",
+    "When to call ESR:",
+    "  - Session start or before planning: esr_get_context",
+    "  - Starting real work: esr_create_entity, then esr_update_state to active",
+    "  - Creating dependencies: esr_link_relation",
+    "  - Producing or modifying files: esr_update_artifact and task --[produces]--> artifact",
+    "  - Running checks or making judgments: esr_evaluate",
+    "  - Finishing work: esr_complete_task preferred, or verify closure before stable",
+    "  - Need previous decisions: esr_mem_recall, then esr_mem_store for new conclusions",
+    "",
+    "Minimum workflow:",
+    "  1. Call esr_get_context before substantial work.",
+    "  2. If no suitable active task exists, create a Task entity in draft.",
+    "  3. Promote the task to active when implementation begins.",
+    "  4. Track produced artifacts and evaluations before marking stable.",
+    "  5. Complete with esr_complete_task whenever possible.",
     "",
     "Entity roles: Actor, Artifact, Task, Concept, Constraint",
-    "State lifecycle: draft → active → stable (or blocked / deprecated)",
+    "State lifecycle: draft -> active -> stable (or blocked / deprecated)",
     "",
     "Relation types:",
     "  Structural: depends_on, part_of, implements",
@@ -199,7 +218,7 @@ export function buildMethodology(): string {
     "  2. esr_link_relation task --[produces]--> artifact",
     "  3. esr_evaluate — with objective metrics",
     "  4. esr_mem_store — summary: what was done, why, caveats",
-    "  5. Group under Concept + Actor --[evaluates]--> task",
+    "  5. esr_complete_task — preferred one-call closure when available",
     "",
     "State loading:",
     "  esr_get_context()             → full state + revision",
@@ -277,6 +296,24 @@ export function buildContext(state: MinimalState): string {
   return lines.join("\n");
 }
 
+export function buildEmptyContext(): string {
+  return [
+    "[ESR_CONTEXT]",
+    "",
+    "No persisted ESR state was found for this workspace yet.",
+    "This is not a reason to skip ESR.",
+    "",
+    "Start protocol:",
+    "  1. Call esr_get_context to confirm the live MCP state.",
+    "  2. For non-trivial work, create a Task entity with esr_create_entity.",
+    "  3. Promote it to active with esr_update_state when implementation begins.",
+    "",
+    "---",
+    "This snapshot is from session start and WILL NOT auto-refresh.",
+    "Call esr_get_context to get the latest state mid-session.",
+  ].join("\n");
+}
+
 // ── Main ─────────────────────────────────────────────────
 
 export function buildHookContext(state: MinimalState): string {
@@ -287,13 +324,23 @@ export function buildHookContext(state: MinimalState): string {
     + buildMemoryContext(sortEntities(state.entities).map(entity => entity.entity_id));
 }
 
+export function buildInitialHookContext(): string {
+  return buildMethodology()
+    + "\n"
+    + buildEmptyContext()
+    + "\n\n"
+    + "[ESR_MEMORY]\n\n  (no memories)\n";
+}
+
 export function main(): void {
   const state = load();
 
   if (!state) {
     console.log(JSON.stringify({
-      continue: true,
-      suppressOutput: true,
+      hookSpecificOutput: {
+        hookEventName: "SessionStart",
+        additionalContext: buildInitialHookContext(),
+      },
     }));
     return;
   }

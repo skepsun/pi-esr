@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { MemoryStore } from "../../core/src/store.js";
-import { buildHookContext, buildMemoryContext, load } from "../src/hook-context";
+import { buildHookContext, buildInitialHookContext, buildMemoryContext, load } from "../src/hook-context";
 
 const tmpDirs: string[] = [];
 const originalCwd = process.cwd();
@@ -42,6 +42,17 @@ function makeState() {
 }
 
 describe("hook context", () => {
+  it("injects ESR operating protocol even without persisted state", () => {
+    const context = buildInitialHookContext();
+
+    expect(context).toContain("ESR Operating Protocol for Codex");
+    expect(context).toContain("No persisted ESR state was found");
+    expect(context).toContain("This is not a reason to skip ESR");
+    expect(context).toContain("mcp__pi-esr__esr_*");
+    expect(context).toContain("Call esr_get_context before substantial work");
+    expect(context).toContain("create a Task entity with esr_create_entity");
+  });
+
   it("honors explicit ESR_SNAPSHOT_PATH without falling back to cwd state", () => {
     const dir = makeTmpDir();
     mkdirSync(join(dir, ".pi-esr-memory"), { recursive: true });
@@ -64,6 +75,8 @@ describe("hook context", () => {
     store.close();
 
     const context = buildHookContext(makeState());
+    expect(context).toContain("When to call ESR:");
+    expect(context).toContain("esr_complete_task");
     expect(context).toContain("[ESR_CONTEXT]");
     expect(context).toContain("[ESR_MEMORY]");
     expect(context).toContain("task-a (1 obs):");

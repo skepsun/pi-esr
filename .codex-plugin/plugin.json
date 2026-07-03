@@ -30,7 +30,7 @@
     ],
     "websiteURL": "https://github.com/skepsun/pi-esr",
     "defaultPrompt": [
-      "Structure your work with ESR: call esr_get_context first, create entities for tasks/modules/decisions, track progress through state transitions, and follow the closure protocol when completing work"
+      "Use ESR actively for non-trivial work. At session start or before planning, call esr_get_context (or mcp__pi-esr__esr_get_context if Codex exposes the MCP-prefixed name). For real work, create a Task with esr_create_entity, move it draft -> active with esr_update_state, link dependencies/artifacts with esr_link_relation, record checks with esr_evaluate, and finish with esr_complete_task when possible."
     ],
     "logo": "./assets/pi-esr.png",
     "brandColor": "#6366F1"
