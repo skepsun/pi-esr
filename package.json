@@ -1,6 +1,6 @@
 {
   "name": "pi-esr",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "ESR (Engineering State Runtime) - constrained semantic graph state machine plugin for Pi agent",
   "keywords": [
     "pi-package",
