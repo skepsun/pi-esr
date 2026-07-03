@@ -1,8 +1,4 @@
 node_modules/
-packages/
-extensions/
-tests/
-src/
 *.tgz
 .pypi
 *.pyc
@@ -21,3 +17,12 @@ esr-state.json
 .cursor/
 .openclaw/
 .codex/
+
+# Exclude source code, keep only dist outputs in packages
+/extensions/
+/tests/
+/src/
+packages/*/src/
+packages/*/tests/
+packages/*/tsconfig.json
+packages/*/tsup.config.ts

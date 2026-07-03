@@ -1,12 +1,12 @@
 {
-  "name": "pi-esr",
-  "version": "0.5.1",
+  "name": "@pi-esr/cli",
+  "version": "0.5.2",
   "description": "ESR (Engineering State Runtime) — constrained semantic graph state machine. One install, all agents.",
   "type": "module",
   "bin": {
     "pi-esr": "./dist/cli.js"
   },
-  "main": "./dist/index.js",
+  "main": "./dist/cli.js",
   "files": [
     "dist/cli.d.ts",
     "dist/cli.js",
