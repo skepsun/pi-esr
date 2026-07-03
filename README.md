@@ -116,29 +116,98 @@ This keeps ESR compatible with:
 
 ## Domain Packs
 
-pi-esr supports a lightweight domain-pack model:
+### Built-in Packs (shipped with distribution)
 
-- `software@0.1.0` — software delivery, refactoring, typecheck, and testing closure
-- `agent-tool@0.1.0` — tool contract design, schema, error taxonomy, timeout strategy, idempotency
-- `govdoc@0.3.0` — public-sector and enterprise documents, proposals, policy references, budget/risk sections
-- `planning-review@0.3.0` — strategic planning review, indicator coverage, consistency checks, rectification closure
-- `refactor@0.1.0` — extract, migrate, verify, document workflows
+Three packs are bundled and auto-loaded from `~/.pi-esr/packs/` or `$ESR_PACKS_PATH`:
 
-The boundaries are strict:
+| Pack | Version | Scope | Auto-expands |
+|------|---------|-------|-------------|
+| `software` | 0.1.0 | Code tasks, refactoring, builds | 1 Task + typecheck/test constraints |
+| `agent-tool` | 0.1.0 | MCP tool/server/plugin development | 6 Tasks (contract, schema, error, timeout, idempotency, tests) + 4 Artifacts + baseline review |
+| `refactor` | 0.1.0 | Extract, migrate, verify, document | 7 Tasks with depends_on chain + 2 Artifacts + safety baseline |
+
+### Pack Locations
+
+Packs are loaded at runtime from these paths (checked in order):
+
+1. **`ESR_PACKS_PATH`** environment variable (colon-separated, like `PATH`)
+2. **`~/.pi-esr/packs/`** (default, created automatically on first run)
+
+Each subdirectory under these paths must contain an `index.js` that exports an `ESRDomainPack` object.
+
+After `npm install -g pi-esr`, run `pi-esr setup` to ensure `~/.pi-esr/packs/` is initialized.
+
+### Creating a New Domain Pack
+
+Every domain pack is a plain object implementing the `ESRDomainPack` interface:
+
+```typescript
+interface ESRDomainPack {
+  name: string;
+  version: string;
+  description?: string;
+  detect(input: { prompt: string; cwd: string }): Promise<number>;  // 0.0–1.0 confidence
+  expand(input: { goal: string; cwd: string }): Promise<ESRPackExpansion>;
+  validate(input: { context: string; cwd: string }): Promise<ESRPackValidationResult>;
+}
+```
+
+**Step-by-step:**
+
+1. Create a directory under `~/.pi-esr/packs/my-pack/`
+2. Add `index.js` exporting your pack object
+3. Implement `detect()` — return a confidence score (0.0–1.0) based on keywords, patterns, or context
+4. Implement `expand()` — return entities, relations, artifacts, constraints, checks, and baselines
+5. Implement `validate()` — return evaluations, gaps, baseline diffs, review findings, and remediation items
+6. The pack is auto-discovered on next `esr_list_packs` or `esr_expand_with_pack` call
+
+**Minimal example** (`~/.pi-esr/packs/my-pack/index.js`):
+
+```javascript
+export const myPack = {
+  name: "my-pack",
+  version: "0.1.0",
+  description: "A minimal domain pack example.",
+
+  async detect(input) {
+    return input.prompt.toLowerCase().includes("my-topic") ? 0.85 : 0.1;
+  },
+
+  async expand(input) {
+    return {
+      entities: [
+        { entity_id: "task-main", role: "Task", state: "draft", label: input.goal, confidence: 0.5 },
+      ],
+      relations: [],
+      artifacts: [],
+      constraints: [{ entity_id: "task-main", description: "must_pass_quality_check" }],
+      summary: "My pack initialized.",
+    };
+  },
+
+  async validate(_input) {
+    return { evaluations: [], constraints: [], memoryRefs: [], gaps: [], summary: "Validated." };
+  },
+};
+```
+
+**Multiple packs in one directory** — use `ESR_PACKS_PATH` to point to additional directories. Packs are only discovered if a subdirectory has `index.js` exporting a valid `ESRDomainPack`.
+
+**Advanced packs** can include:
+- `checks` — structured check definitions for quality gates
+- `referenceBaselines` — requirement baselines with sections and expected signals
+- `baselineDiffs` — diff between actual vs expected in validation
+- `reviewFindings` — structured findings with severity, category, evidence, recommendations
+- `remediationItems` — suggested actions with priority, owner hints, traceability
+
+See `packages/domain-pack-agent-tool/src/index.ts` and `packages/domain-pack-refactor/src/index.ts` for full-featured examples.
+
+### Design Boundaries
 
 - `ESR` does not understand domain semantics
 - `Pack` does not persist state
 - `Adapter` only performs structural mapping
 - `Registry` only handles discovery and selection
-
-## Real Enterprise Scenarios
-
-Two non-software scenarios have been calibrated against real enterprise materials:
-
-- `planning-review` — 15th Five-Year planning review, strategy alignment, indicator completeness, text/data consistency, rectification tracking. Supports requirement-source modeling for national standards.
-- `govdoc` — official writing, project proposals, budget sections, policy references, risk-section completeness
-
-All semantics enter through `Pack -> ESR` compilation, not hard-coded core.
 
 ## Commands
 
@@ -230,8 +299,6 @@ packages/
 ├── cli/                           pi-esr CLI — setup, plugin install, MCP registration
 ├── domain-pack/                   @pi-esr/domain-pack — Pack protocol + adapter types
 ├── domain-pack-agent-tool/        Agent tool development domain pack
-├── domain-pack-govdoc/            Government document domain pack
-├── domain-pack-planning-review/   Planning review domain pack
 ├── domain-pack-refactor/          Refactoring domain pack
 ├── domain-pack-software/          Software engineering domain pack
 └── memory-bridge/                 @pi-esr/memory-bridge — Host capability detection + provider selection
@@ -269,7 +336,7 @@ npm run typecheck           # tsc --noEmit, zero errors
 |-------|-------|---------------|
 | Graph core | 54 | Entity CRUD, state transitions, cycle detection, serialization roundtrips, fingerprint stability, immutability, context builder, artifact auto-proxy, neighborhood queries |
 | Closure | 10 | Evaluation engine, constraint validation, closure promotion, policy-driven gating, memory-ref requirements |
-| Tool integration | 25 | All 16 ESR tools, pack detection/expansion, closure workflow, domain pack scenarios (software, govdoc, planning-review) |
+| Tool integration | 25 | All 16 ESR tools, pack detection/expansion, closure workflow, domain pack scenarios |
 | Memory | 24 | Store CRUD, recall/search/timeline, journal, context builder, format helpers, session tag filtering |
 | Session | 3 | Current session ID get/set/reset |
 | Efficiency | 15 | Token compression benchmarks, prefix-cache stability, context growth, cost projection, DAG parallelism, real-world scenario |

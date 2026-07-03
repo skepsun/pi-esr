@@ -107,38 +107,102 @@ pi-esr 不假设宿主一定没有记忆系统，也不强制接管记忆。
 - 如果宿主没有可用记忆能力，ESR 可以退回 SQLite provider 或空 provider
 - ESR 本身只保存会影响后续决策的结构化状态，不复制外部记忆全文
 
-这使得 ESR 可以与不同框架自然配合，包括：
-
-- 自带工程状态或记忆的 agent runtime
-- 纯检索式 memory 插件
-- 纯摘要式记忆插件
-- 没有记忆能力的轻量宿主
+这使得 ESR 可以与不同框架自然配合，包括自带工程状态或记忆的 agent runtime、纯检索式 memory 插件、纯摘要式记忆插件、以及没有记忆能力的轻量宿主。
 
 ## Domain Pack 与内建 Pack Market
 
-pi-esr 支持轻量 Domain Pack 机制：
+### 内建 Pack（随发行版发布）
 
-- `software@0.1.0`：软件研发、重构、typecheck 与测试闭环
-- `agent-tool@0.1.0`：工具契约设计、schema、错误分类、超时策略、幂等检查
-- `govdoc@0.3.0`：政企公文、申请书、预算与政策依据
-- `planning-review@0.3.0`：规划审核、指标审查、整改闭环
-- `refactor@0.1.0`：抽取、迁移、验证、文档化工作流
+三个通用 Pack 随发行版捆绑，从 `~/.pi-esr/packs/` 或 `$ESR_PACKS_PATH` 自动加载：
 
-设计边界保持克制：
+| Pack | 版本 | 适用场景 | 自动展开内容 |
+|------|------|---------|------------|
+| `software` | 0.1.0 | 代码任务、重构、构建 | 1 个 Task + typecheck/test 约束 |
+| `agent-tool` | 0.1.0 | MCP 工具/服务/插件开发 | 6 个 Task（契约、schema、错误、超时、幂等、测试）+ 4 个 Artifact + 基准审查 |
+| `refactor` | 0.1.0 | 抽取、迁移、验证、文档化 | 7 个 Task（含 depends_on 链）+ 2 个 Artifact + 安全基准 |
 
-- `ESR` 不理解行业
+### Pack 加载路径
+
+Pack 在运行时从以下路径加载（按顺序检查）：
+
+1. **`ESR_PACKS_PATH`** 环境变量（冒号分隔，类似 `PATH`）
+2. **`~/.pi-esr/packs/`**（默认路径，首次运行时自动创建）
+
+这些路径下的每个子目录必须包含一个 `index.js`，导出 `ESRDomainPack` 对象。
+
+执行 `npm install -g pi-esr` 后，运行 `pi-esr setup` 确保 `~/.pi-esr/packs/` 被初始化。
+
+### 创建新的 Domain Pack
+
+每个 Domain Pack 是一个实现了 `ESRDomainPack` 接口的普通对象：
+
+```typescript
+interface ESRDomainPack {
+  name: string;
+  version: string;
+  description?: string;
+  detect(input: { prompt: string; cwd: string }): Promise<number>;  // 0.0–1.0 置信度
+  expand(input: { goal: string; cwd: string }): Promise<ESRPackExpansion>;
+  validate(input: { context: string; cwd: string }): Promise<ESRPackValidationResult>;
+}
+```
+
+**创建步骤：**
+
+1. 在 `~/.pi-esr/packs/my-pack/` 下创建目录
+2. 添加 `index.js`，导出你的 Pack 对象
+3. 实现 `detect()` — 根据关键词、模式或上下文返回置信度（0.0–1.0）
+4. 实现 `expand()` — 返回实体、关系、产物、约束、检查项和基准
+5. 实现 `validate()` — 返回评估、缺口、基准差异、审查发现和修复建议
+6. Pack 会在下次调用 `esr_list_packs` 或 `esr_expand_with_pack` 时自动发现
+
+**最小示例**（`~/.pi-esr/packs/my-pack/index.js`）：
+
+```javascript
+export const myPack = {
+  name: "my-pack",
+  version: "0.1.0",
+  description: "一个最小 Domain Pack 示例。",
+
+  async detect(input) {
+    return input.prompt.toLowerCase().includes("my-topic") ? 0.85 : 0.1;
+  },
+
+  async expand(input) {
+    return {
+      entities: [
+        { entity_id: "task-main", role: "Task", state: "draft", label: input.goal, confidence: 0.5 },
+      ],
+      relations: [],
+      artifacts: [],
+      constraints: [{ entity_id: "task-main", description: "must_pass_quality_check" }],
+      summary: "我的 Pack 已初始化。",
+    };
+  },
+
+  async validate(_input) {
+    return { evaluations: [], constraints: [], memoryRefs: [], gaps: [], summary: "已验证。" };
+  },
+};
+```
+
+**一个目录多个 Pack** — 使用 `ESR_PACKS_PATH` 指向其他目录。只有子目录包含导出有效 `ESRDomainPack` 的 `index.js` 时才能被发现。
+
+**高级 Pack** 可以包含：
+- `checks` — 质量门的结构化检查定义
+- `referenceBaselines` — 包含章节和预期信号的要求基准
+- `baselineDiffs` — 验证中实际 vs 预期的差异
+- `reviewFindings` — 包含严重度、类别、证据、建议的结构化发现
+- `remediationItems` — 包含优先级、负责人提示、可追溯性的建议操作
+
+完整实现示例见 `packages/domain-pack-agent-tool/src/index.ts` 和 `packages/domain-pack-refactor/src/index.ts`。
+
+### 设计边界
+
+- `ESR` 不理解行业语义
 - `Pack` 不持久化状态
 - `Adapter` 只做结构映射
 - `Registry` 只做发现与选择
-
-## 真实企业场景映射
-
-已用真实材料校准过两类非软件场景：
-
-- `planning-review`：十五五规划审核、战略对齐、指标完整性、文本与数据一致性、整改跟踪。支持要求来源建模，可挂接国家标准作为审核依据
-- `govdoc`：公文写作、立项申请、预算章节、政策依据、风险章节完整性
-
-所有语义都通过 `Pack -> ESR` 编译进入状态图，而非写死在 Core。
 
 ## 命令
 
@@ -230,8 +294,6 @@ packages/
 ├── cli/                           pi-esr CLI — setup、plugin install、MCP 注册
 ├── domain-pack/                   @pi-esr/domain-pack — Pack 协议 + 适配器类型
 ├── domain-pack-agent-tool/        智能体工具开发领域包
-├── domain-pack-govdoc/            政企公文领域包
-├── domain-pack-planning-review/   规划审核领域包
 ├── domain-pack-refactor/          重构领域包
 ├── domain-pack-software/          软件工程领域包
 └── memory-bridge/                 @pi-esr/memory-bridge — 宿主能力检测 + provider 选择
@@ -269,7 +331,7 @@ npm run typecheck           # tsc --noEmit，零错误
 |------|--------|----------|
 | Graph core | 54 | 实体 CRUD、状态转换、环检测、序列化往返、指纹稳定性、不可变性、上下文构建器、artifact 自动代理、邻域查询 |
 | Closure | 10 | 评估引擎、约束校验、闭环晋升、策略门控、记忆引用要求 |
-| Tool integration | 25 | 全部 16 个 ESR 工具、Pack 检测/展开、闭环工作流、领域包场景（software、govdoc、planning-review） |
+| Tool integration | 25 | 全部 16 个 ESR 工具、Pack 检测/展开、闭环工作流、领域包场景 |
 | Memory | 24 | 存储 CRUD、召回/搜索/时间线、日志、上下文构建器、格式化辅助、会话标签过滤 |
 | Session | 3 | 当前会话 ID 的获取/设置/重置 |
 | Efficiency | 15 | Token 压缩基准、前缀缓存稳定性、上下文增长率、成本预估、DAG 并行、真实场景 |
