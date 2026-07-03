@@ -7,7 +7,7 @@
 import { buildESRContext, ESRGraph } from "@pi-esr/core";
 import { buildActiveMemoryContext } from "../../core/src/recall.js";
 import { MemoryStore } from "../../core/src/store.js";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join, dirname, resolve, parse } from "node:path";
 
 export interface OpenCodeMCPConfig {
@@ -63,7 +63,7 @@ const DEFAULT_SNAPSHOT = () =>
 
 /** Walk up from cwd to find an existing ESR state file. */
 function findSnapshot(): string | null {
-  if (process.env.ESR_SNAPSHOT_PATH && existsSync(process.env.ESR_SNAPSHOT_PATH)) {
+  if (process.env.ESR_SNAPSHOT_PATH) {
     return process.env.ESR_SNAPSHOT_PATH;
   }
   let dir = resolve(process.cwd());
@@ -94,7 +94,8 @@ export function getGraph(): ESRGraph {
         const raw = readFileSync(snapPath, "utf-8");
         const data = JSON.parse(raw);
         if (typeof data.version === "number" && Array.isArray(data.entities)) {
-          _graph.loadFromState(data);
+          const loadResult = _graph.loadFromState(data);
+          if (!loadResult.ok) console.error("[pi-esr] Invalid snapshot state:", loadResult.error);
         }
       } catch { /* fresh start */ }
     }
@@ -118,7 +119,23 @@ export function getMemory(): MemoryStore | null {
 export function saveGraph(): void {
   if (_graph) {
     const targetPath = findSnapshot() ?? DEFAULT_SNAPSHOT();
-    writeFileSync(targetPath, JSON.stringify(_graph.toPersistedState(), null, 2), "utf-8");
+    const stateDir = dirname(targetPath);
+    mkdirSync(stateDir, { recursive: true });
+    const lockPath = join(stateDir, "esr-state.json.lock");
+    try {
+      writeFileSync(lockPath, String(process.pid), { flag: "wx" });
+    } catch (err) {
+      console.error("[pi-esr] Failed to acquire snapshot lock:", err);
+      return;
+    }
+
+    try {
+      writeFileSync(targetPath, JSON.stringify(_graph.toPersistedState(), null, 2), "utf-8");
+    } catch (err) {
+      console.error("[pi-esr] Failed to write snapshot:", err);
+    } finally {
+      try { unlinkSync(lockPath); } catch { /* ignore */ }
+    }
   }
 }
 

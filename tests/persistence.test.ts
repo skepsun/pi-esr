@@ -1,9 +1,28 @@
 /**
  * pi-esr: Persistence tests — graph reconstruction + validation
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { ESRGraph } from "@pi-esr/core";
 import { reconstructGraph } from "../extensions/persistence/reconstruct";
+import { persistGraphState } from "../extensions/persistence/graph-persist";
+
+const tmpDirs: string[] = [];
+const originalMemoryDir = process.env.PI_ESR_MEMORY_DIR;
+
+afterEach(() => {
+  if (originalMemoryDir === undefined) {
+    delete process.env.PI_ESR_MEMORY_DIR;
+  } else {
+    process.env.PI_ESR_MEMORY_DIR = originalMemoryDir;
+  }
+  while (tmpDirs.length > 0) {
+    const dir = tmpDirs.pop();
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 function makePersistedState() {
   return {
@@ -55,6 +74,35 @@ describe("Persistence reconstruction", () => {
     expect(graph.getEntity("task-1")?.state).toBe("active");
     expect(graph.getEntity("task-1")?.label).toBe("Task 1");
     expect(graph.getAllRelations()).toHaveLength(1);
+  });
+});
+
+describe("Persistence mirror locking", () => {
+  it("skips project file writes when the lock is already held", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-esr-extension-lock-"));
+    tmpDirs.push(dir);
+    process.env.PI_ESR_MEMORY_DIR = dir;
+    writeFileSync(join(dir, "esr-state.json.lock"), "other-process");
+
+    const graph = new ESRGraph();
+    graph.createEntity({
+      entity_id: "task-lock",
+      role: "Task",
+      state: "draft",
+      confidence: 0,
+      metrics: {},
+      updated_at: new Date().toISOString(),
+    });
+    const entries: unknown[] = [];
+
+    persistGraphState({
+      appendEntry(_type: string, data: unknown) {
+        entries.push(data);
+      },
+    } as never, graph);
+
+    expect(entries).toHaveLength(1);
+    expect(existsSync(join(dir, "esr-state.json"))).toBe(false);
   });
 });
 

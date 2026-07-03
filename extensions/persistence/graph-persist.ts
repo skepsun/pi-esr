@@ -3,7 +3,7 @@
  *
  * Write path:
  *   1. Session branch entry (per-session audit trail)
- *   2. Project-level JSON file (.pi-esr-memory/esr-state.json) — cross-session source of truth
+ *   2. Project-level JSON file (.pi-esr-memory/esr-state.json) — compatibility mirror
  *
  * Read path:
  *   1. Current session branch entries (most specific — last entry wins)
@@ -14,7 +14,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { ESRGraph } from "../core";
 import type { ESRPersistedState } from "../core";
-import { writeFileSync, readFileSync, existsSync, readdirSync, statSync, createReadStream } from "node:fs";
+import { writeFileSync, readFileSync, existsSync, readdirSync, statSync, createReadStream, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
@@ -47,6 +47,10 @@ function isPersistedState(data: unknown): data is ESRPersistedState {
 // Write path
 // ═══════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════
+// Advisory file lock — prevents dual-writer races on esr-state.json
+// ═══════════════════════════════════════════════════════════
+
 export function persistGraphState(pi: ExtensionAPI, graph: ESRGraph): void {
   const state = graph.toPersistedState();
   const stateJson = JSON.stringify(state);
@@ -59,10 +63,22 @@ export function persistGraphState(pi: ExtensionAPI, graph: ESRGraph): void {
   }
 
   // Project-level file (cross-session continuity)
+  // Advisory lock to prevent dual-writer races
+  const lockPath = join(getDir(), "esr-state.json.lock");
+  mkdirSync(getDir(), { recursive: true });
+  try {
+    writeFileSync(lockPath, String(process.pid), { flag: "wx" });
+  } catch (err) {
+    console.error("[pi-esr] Failed to acquire state file lock:", err);
+    return;
+  }
+
   try {
     writeFileSync(getFilePath(), stateJson, { flag: "w" });
   } catch (err) {
     console.error("[pi-esr] Failed to write state file:", err);
+  } finally {
+    try { unlinkSync(lockPath); } catch { /* ignore */ }
   }
 }
 
@@ -115,7 +131,11 @@ function tryLoadFromSessionBranch(ctx: ExtensionContext, graph: ESRGraph): boole
     }
   }
   if (lastData) {
-    graph.loadFromState(lastData);
+    const result = graph.loadFromState(lastData);
+    if (!result.ok) {
+      console.error("[pi-esr] Invalid session state:", result.error);
+      return false;
+    }
     return true;
   }
   return false;
@@ -127,7 +147,11 @@ function tryLoadFromFile(graph: ESRGraph): boolean {
     if (!existsSync(fp)) return false;
     const data = JSON.parse(readFileSync(fp, "utf-8"));
     if (!isPersistedState(data)) return false;
-    graph.loadFromState(data);
+    const result = graph.loadFromState(data);
+    if (!result.ok) {
+      console.error("[pi-esr] Invalid file state:", result.error);
+      return false;
+    }
     return true;
   } catch (err) {
     console.error("[pi-esr] Failed to load from file:", err);
@@ -151,9 +175,13 @@ async function scanSessionsForState(graph: ESRGraph, sessionDir: string): Promis
     for (const { path } of files) {
       const state = await extractStateFromSessionFile(path);
       if (state && (state.entities.length > 0 || state.relations.length > 0)) {
-        graph.loadFromState(state);
+        const result = graph.loadFromState(state);
+        if (!result.ok) continue;
         // Seed the file so bootstrap never runs again
-        try { writeFileSync(getFilePath(), JSON.stringify(state, null, 2), { flag: "w" }); } catch { /* ignore */ }
+        try {
+          mkdirSync(getDir(), { recursive: true });
+          writeFileSync(getFilePath(), JSON.stringify(state, null, 2), { flag: "w" });
+        } catch { /* ignore */ }
         return true;
       }
     }

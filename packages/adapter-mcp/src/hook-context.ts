@@ -12,8 +12,9 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join, dirname, resolve, parse } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { findSnapshotPath } from "./snapshot-path";
 
 const require = createRequire(import.meta.url);
 let DatabaseModule: any = null;
@@ -80,25 +81,10 @@ function isValidState(data: unknown): data is MinimalState {
 }
 
 function findStateFile(): string | null {
-  if (process.env.ESR_SNAPSHOT_PATH && existsSync(process.env.ESR_SNAPSHOT_PATH)) {
-    return process.env.ESR_SNAPSHOT_PATH;
-  }
-  let dir = resolve(process.cwd());
-  const root = parse(dir).root;
-  const candidates = [".pi-esr-memory/esr-state.json", ".esr-snapshot.json"];
-  while (dir !== root) {
-    for (const c of candidates) {
-      const p = join(dir, c);
-      if (existsSync(p)) return p;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
+  return findSnapshotPath();
 }
 
-function load(): MinimalState | null {
+export function load(): MinimalState | null {
   const filePath = findStateFile();
   if (!filePath) return null;
   try {

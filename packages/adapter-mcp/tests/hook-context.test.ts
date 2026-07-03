@@ -3,12 +3,20 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { MemoryStore } from "../../core/src/store.js";
-import { buildHookContext, buildMemoryContext } from "../src/hook-context";
+import { buildHookContext, buildMemoryContext, load } from "../src/hook-context";
 
 const tmpDirs: string[] = [];
+const originalCwd = process.cwd();
+const originalSnapshotPath = process.env.ESR_SNAPSHOT_PATH;
 
 afterEach(() => {
+  process.chdir(originalCwd);
   delete process.env.PI_ESR_MEMORY_DIR;
+  if (originalSnapshotPath === undefined) {
+    delete process.env.ESR_SNAPSHOT_PATH;
+  } else {
+    process.env.ESR_SNAPSHOT_PATH = originalSnapshotPath;
+  }
   while (tmpDirs.length > 0) {
     const dir = tmpDirs.pop();
     if (dir) rmSync(dir, { recursive: true, force: true });
@@ -34,6 +42,16 @@ function makeState() {
 }
 
 describe("hook context", () => {
+  it("honors explicit ESR_SNAPSHOT_PATH without falling back to cwd state", () => {
+    const dir = makeTmpDir();
+    mkdirSync(join(dir, ".pi-esr-memory"), { recursive: true });
+    writeFileSync(join(dir, ".pi-esr-memory", "esr-state.json"), JSON.stringify(makeState()));
+    process.chdir(dir);
+    process.env.ESR_SNAPSHOT_PATH = join(dir, "missing-state.json");
+
+    expect(load()).toBeNull();
+  });
+
   it("injects memory summary for known entities", () => {
     const memoryDir = makeTmpDir();
     process.env.PI_ESR_MEMORY_DIR = memoryDir;

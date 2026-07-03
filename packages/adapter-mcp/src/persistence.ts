@@ -8,19 +8,15 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
-import { join, dirname, resolve, parse } from "node:path";
+import { join, dirname } from "node:path";
 import type { ESRPersistedState } from "@pi-esr/core";
+import { defaultSnapshotPath, findSnapshotPath } from "./snapshot-path";
 
 export type PersistResult = { ok: true } | { ok: false; error: string };
 
-function defaultSnapshotPath(): string {
-  return join(process.cwd(), ".pi-esr-memory", "esr-state.json");
-}
-
 export function persist(state: ESRPersistedState): PersistResult {
   // Write to the existing file location if found, otherwise to default path
-  const existing = findStateFile();
-  const targetPath = existing ?? defaultSnapshotPath();
+  const targetPath = findStateFile();
   const stateDir = dirname(targetPath);
 
   try {
@@ -68,34 +64,12 @@ function tryLoadPath(path: string): ESRPersistedState | null {
   }
 }
 
-function findStateFile(): string | null {
-  // 1. ESR_SNAPSHOT_PATH env var
-  if (process.env.ESR_SNAPSHOT_PATH) {
-    return process.env.ESR_SNAPSHOT_PATH;
-  }
-
-  // 2. Walk up from cwd to find .pi-esr-memory/esr-state.json or .esr-snapshot.json
-  let dir = resolve(process.cwd());
-  const root = parse(dir).root;
-  const candidates = [".pi-esr-memory/esr-state.json", ".esr-snapshot.json"];
-
-  while (dir !== root) {
-    for (const c of candidates) {
-      const p = join(dir, c);
-      if (existsSync(p)) return p;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-
-  // 3. Fall back to cwd (file won't exist, but persist will create it)
-  return defaultSnapshotPath();
+function findStateFile(): string {
+  return findSnapshotPath({ includeDefault: true }) ?? defaultSnapshotPath();
 }
 
 export function load(): ESRPersistedState | null {
   const filePath = findStateFile();
-  if (!filePath) return null;
   return tryLoadPath(filePath);
 }
 
