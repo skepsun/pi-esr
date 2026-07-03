@@ -549,10 +549,12 @@ function pluginInstallCodex(): SetupResult {
 
 function pluginInstallPi(): SetupResult {
   if (!which("pi")) return { agent: "Pi Agent", status: "error", message: "pi CLI not found" };
-  // In npm install, the CLI is at packages/cli/dist/cli.js — root is 3 levels up
+  // cli.js is at packages/cli/dist/cli.js — root package is 3 levels up
   const rootDir = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
-  const hasPluginJson = existsSync(join(rootDir, ".claude-plugin", "plugin.json"));
-  const installDir = hasPluginJson ? rootDir : findPluginDir();
+  // In npm installs, dist/extensions/index.js exists at root. In dev, fall back to findPluginDir.
+  const installDir = existsSync(join(rootDir, "dist", "extensions", "index.js"))
+    ? rootDir
+    : findPluginDir();
   try {
     const out = execSync(`pi install -l ${JSON.stringify(installDir)} 2>&1 || true`, { encoding: "utf-8" });
     if (out.includes("already installed")) return { agent: "Pi Agent", status: "already", message: "Already installed" };
