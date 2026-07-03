@@ -1,6 +1,6 @@
 {
   "name": "pi-esr",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "ESR (Engineering State Runtime) - constrained semantic graph state machine plugin for Pi agent",
   "keywords": [
     "pi-package",
@@ -42,7 +42,8 @@
     "@earendil-works/pi-tui": "*",
     "typebox": "*"
   },
-  "dependencies": {
+  "dependencies": {},
+  "optionalDependencies": {
     "better-sqlite3": "^11.0.0"
   },
   "devDependencies": {

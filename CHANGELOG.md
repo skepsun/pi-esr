@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.2] — 2026-07-03
+
+### Fixed
+- Moved `better-sqlite3` from `dependencies` to `optionalDependencies` — installs on M4 Mac without Xcode CLI tools
+- Memory layer gracefully degrades to `NullMemoryProvider` when SQLite is unavailable; core ESR tools unaffected
+
 ## [0.5.1] — 2026-07-03
 
 ### Added
