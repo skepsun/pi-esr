@@ -8,37 +8,46 @@ A constrained semantic graph state machine for engineering, documentation, and d
 
 ## Quick Start
 
-### Pi Agent
+### Pi Agent (one command)
+
+```bash
+pi install npm:pi-esr
+```
+
+That's it — `/esr` command is available immediately. ESR graph tools, closure tools, pack tools, and optional memory tools are ready.
+
+For global install (all projects):
+
+```bash
+pi install npm:pi-esr
+```
+
+For project-local only:
 
 ```bash
 npm install -g pi-esr
 pi-esr setup
 ```
 
-ESR graph tools, closure tools, pack tools, and optional memory tools are now available.
+### Pi Agent (CLI-based)
+
+```bash
+npm install -g pi-esr
+pi-esr setup              # project-local
+pi-esr setup --global     # all projects
+```
 
 ### Claude Code
 
 ```bash
 npm install -g pi-esr
-pi-esr plugin install --claude
+pi-esr setup --claude
 ```
-
-Installs the native Claude Code plugin and registers the `pi-esr` MCP server automatically.
 
 ### Codex (OpenAI)
 
 ```bash
 npm install -g pi-esr
-pi-esr plugin install --codex
-```
-
-Installs the native Codex plugin and registers the `pi-esr` MCP server automatically.
-
-### MCP-only (no native plugin)
-
-```bash
-pi-esr setup --claude
 pi-esr setup --codex
 ```
 

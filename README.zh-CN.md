@@ -8,37 +8,46 @@
 
 ## 快速开始
 
-### Pi Agent
+### Pi Agent（一条命令）
+
+```bash
+pi install npm:pi-esr
+```
+
+即可完成 — `/esr` 命令立即可用，ESR 图工具、闭环工具、Pack 工具与可选记忆工具已就绪。
+
+全局安装（所有项目可用）：
+
+```bash
+pi install npm:pi-esr
+```
+
+项目本地安装：
 
 ```bash
 npm install -g pi-esr
 pi-esr setup
 ```
 
-ESR 图工具、闭环工具、Pack 工具与可选记忆工具已就绪。
+### Pi Agent（CLI 方式）
+
+```bash
+npm install -g pi-esr
+pi-esr setup              # 项目本地
+pi-esr setup --global     # 所有项目
+```
 
 ### Claude Code
 
 ```bash
 npm install -g pi-esr
-pi-esr plugin install --claude
+pi-esr setup --claude
 ```
-
-安装 Claude Code 原生插件，并自动注册 `pi-esr` MCP 服务。
 
 ### Codex (OpenAI)
 
 ```bash
 npm install -g pi-esr
-pi-esr plugin install --codex
-```
-
-安装 Codex 原生插件，并自动注册 `pi-esr` MCP 服务。
-
-### 仅 MCP（不安装原生插件）
-
-```bash
-pi-esr setup --claude
 pi-esr setup --codex
 ```
 
