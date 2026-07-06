@@ -55,6 +55,7 @@ pi-esr setup --codex
 
 ```bash
 git clone https://github.com/skepsun/pi-esr.git && cd pi-esr && npm install
+npm run build               # 12 个包
 npm test                    # 156 个测试
 npm run typecheck           # 零类型错误
 ```
