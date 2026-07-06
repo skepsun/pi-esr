@@ -1,6 +1,6 @@
 {
   "name": "@pi-esr/cli",
-  "version": "0.5.5",
+  "version": "0.6.3",
   "description": "ESR (Engineering State Runtime) — constrained semantic graph state machine. One install, all agents.",
   "type": "module",
   "bin": {
@@ -34,9 +34,9 @@
     "postinstall": "node -e \"console.log('\\n✨ pi-esr installed! Run: pi-esr plugin install\\n')\""
   },
   "dependencies": {
-    "@pi-esr/adapter-mcp": "0.5.1",
-    "@pi-esr/adapter-opencode": "0.5.1",
-    "@pi-esr/core": "0.5.1",
+    "@pi-esr/adapter-mcp": "0.6.3",
+    "@pi-esr/adapter-opencode": "0.6.3",
+    "@pi-esr/core": "0.6.3",
     "pi-esr": "file:"
   },
   "keywords": [

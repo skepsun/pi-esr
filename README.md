@@ -131,9 +131,9 @@ Three packs are bundled and auto-loaded from `~/.pi-esr/packs/` or `$ESR_PACKS_P
 
 | Pack | Version | Scope | Auto-expands |
 |------|---------|-------|-------------|
-| `software` | 0.1.0 | Code tasks, refactoring, builds | 1 Task + typecheck/test constraints |
-| `agent-tool` | 0.1.0 | MCP tool/server/plugin development | 6 Tasks (contract, schema, error, timeout, idempotency, tests) + 4 Artifacts + baseline review |
-| `refactor` | 0.1.0 | Extract, migrate, verify, document | 7 Tasks with depends_on chain + 2 Artifacts + safety baseline |
+| `software` | 0.6.3 | Code tasks, refactoring, builds | 1 Task + typecheck/test constraints |
+| `agent-tool` | 0.6.3 | MCP tool/server/plugin development | 6 Tasks (contract, schema, error, timeout, idempotency, tests) + 4 Artifacts + baseline review |
+| `refactor` | 0.6.3 | Extract, migrate, verify, document | 7 Tasks with depends_on chain + 2 Artifacts + safety baseline |
 
 ### Pack Locations
 
@@ -175,7 +175,7 @@ interface ESRDomainPack {
 ```javascript
 export const myPack = {
   name: "my-pack",
-  version: "0.1.0",
+  version: "0.6.3",
   description: "A minimal domain pack example.",
 
   async detect(input) {

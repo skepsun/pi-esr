@@ -512,9 +512,9 @@ describe("registerTools", () => {
     const result = await runTool(tools, "esr_list_packs", {});
 
     expect(result.content[0]?.text).toContain("Available packs (4)");
-    expect(result.content[0]?.text).toContain("govdoc@0.1.0");
-    expect(result.content[0]?.text).toContain("planning-review@0.1.0");
-    expect(result.content[0]?.text).toContain("software@0.1.0");
+    expect(result.content[0]?.text).toContain("govdoc@0.6.3");
+    expect(result.content[0]?.text).toContain("planning-review@0.6.3");
+    expect(result.content[0]?.text).toContain("software@0.6.3");
     expect(result.details.packs).toHaveLength(4);
   });
 

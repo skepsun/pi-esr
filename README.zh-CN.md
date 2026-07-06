@@ -126,9 +126,9 @@ pi-esr 不假设宿主一定没有记忆系统，也不强制接管记忆。
 
 | Pack | 版本 | 适用场景 | 自动展开内容 |
 |------|------|---------|------------|
-| `software` | 0.1.0 | 代码任务、重构、构建 | 1 个 Task + typecheck/test 约束 |
-| `agent-tool` | 0.1.0 | MCP 工具/服务/插件开发 | 6 个 Task（契约、schema、错误、超时、幂等、测试）+ 4 个 Artifact + 基准审查 |
-| `refactor` | 0.1.0 | 抽取、迁移、验证、文档化 | 7 个 Task（含 depends_on 链）+ 2 个 Artifact + 安全基准 |
+| `software` | 0.6.3 | 代码任务、重构、构建 | 1 个 Task + typecheck/test 约束 |
+| `agent-tool` | 0.6.3 | MCP 工具/服务/插件开发 | 6 个 Task（契约、schema、错误、超时、幂等、测试）+ 4 个 Artifact + 基准审查 |
+| `refactor` | 0.6.3 | 抽取、迁移、验证、文档化 | 7 个 Task（含 depends_on 链）+ 2 个 Artifact + 安全基准 |
 
 ### Pack 加载路径
 
@@ -170,7 +170,7 @@ interface ESRDomainPack {
 ```javascript
 export const myPack = {
   name: "my-pack",
-  version: "0.1.0",
+  version: "0.6.3",
   description: "一个最小 Domain Pack 示例。",
 
   async detect(input) {

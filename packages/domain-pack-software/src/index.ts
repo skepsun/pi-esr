@@ -6,7 +6,7 @@ import type {
 
 export const softwarePack: ESRDomainPack = {
   name: "software",
-  version: "0.1.0",
+  version: "0.6.3",
   description: "Default software engineering pack for tasks, code artifacts, and quality constraints.",
 
   async detect(input) {

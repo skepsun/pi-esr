@@ -1,6 +1,6 @@
 {
   "name": "@pi-esr/domain-pack",
-  "version": "0.5.1",
+  "version": "0.6.3",
   "description": "Domain pack protocol and adapter types for pi-esr",
   "type": "module",
   "main": "./dist/index.js",

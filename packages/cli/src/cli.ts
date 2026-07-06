@@ -14,7 +14,7 @@
 
 import {
   setupAll, setupOne, statusAll, removeAll, removeOne,
-  pluginInstallAll, pluginInstallOne, pluginRemoveAll, pluginRemoveOne, pluginStatusAll,
+  pluginInstallAll, pluginInstallOne, pluginInstallPiGlobal, pluginRemoveAll, pluginRemoveOne, pluginStatusAll,
   setupPiGlobal,
 } from "./setup.js";
 
@@ -41,7 +41,7 @@ if (cmd === "setup") {
   }
   console.log("\n✅ Done. Restart your agent to use ESR tools.");
 } else if (cmd === "status") {
-  console.log("pi-esr v0.6.2\n");
+  console.log("pi-esr v0.6.3\n");
   const results = statusAll();
   for (const r of results) {
     const icon = r.status === "configured" ? "✅" : r.status === "already" ? "✓" : "✗";

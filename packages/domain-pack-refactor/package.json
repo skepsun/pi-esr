@@ -1,6 +1,6 @@
 {
   "name": "@pi-esr/domain-pack-refactor",
-  "version": "0.1.0",
+  "version": "0.6.3",
   "description": "Refactoring domain pack for pi-esr: extract, migrate, verify, document",
   "type": "module",
   "main": "./dist/index.js",

@@ -3,6 +3,7 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { keyText } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
@@ -14,7 +15,6 @@ import {
   listClosureGaps,
   listTasks,
 } from "../core";
-import type { ESRPersistedState } from "../core";
 import { persistGraph } from "../persistence/snapshot";
 
 function okText(text: string, details: Record<string, unknown>) {
@@ -182,14 +182,59 @@ export async function registerTools(
     async execute(_id, params: any) {
       const sinceRevision = typeof params.since_revision === "number" ? params.since_revision : undefined;
       const context = buildESRContext(graph, { sinceRevision });
+      const state = graph.toPersistedState();
+      const entities = state.entities;
+      const tasks = entities.filter((e: any) => e.role === "Task");
+      const summary = {
+        entities: entities.length,
+        tasks: tasks.length,
+        tasksByState: Object.fromEntries(
+          ["stable", "active", "draft", "blocked", "deprecated"].map(s => [s, tasks.filter((t: any) => t.state === s).length]),
+        ),
+        constraints: entities.filter((e: any) => e.role === "Constraint").length,
+        relations: state.relations.length,
+        artifacts: state.artifacts.length,
+      };
       return {
         content: [{ type: "text", text: context }],
-        details: graph.toPersistedState() satisfies ESRPersistedState,
+        details: { ...state, summary },
       };
     },
-    renderResult(result: any, _options: any, theme: any) {
+    renderResult(result: any, { expanded }: { expanded: boolean }, theme: any) {
       const first = result.content?.[0];
-      return new Text(first?.type === "text" ? first.text : theme.fg("dim", "(empty ESR graph)"), 0, 0);
+      if (!first || first.type !== "text") {
+        return new Text(theme.fg("dim", "(empty ESR graph)"), 0, 0);
+      }
+      const text = first.text;
+      // Incremental: no changes — always show short
+      if (text.includes("unchanged since revision")) {
+        return new Text(theme.fg("dim", text.split("\n")[2] || text), 0, 0);
+      }
+      const s = result.details?.summary;
+      if (!expanded) {
+        const parts: string[] = [];
+        parts.push(theme.fg("accent", `${s.entities} entities`));
+        if (s.tasks > 0) {
+          const taskParts: string[] = [];
+          if (s.tasksByState?.active) taskParts.push(theme.fg("warning", `${s.tasksByState.active} active`));
+          if (s.tasksByState?.stable) taskParts.push(theme.fg("success", `${s.tasksByState.stable} stable`));
+          if (s.tasksByState?.draft) taskParts.push(theme.fg("dim", `${s.tasksByState.draft} draft`));
+          parts.push(`(${s.tasks} tasks: ${taskParts.join(", ")})`);
+        }
+        if (s.constraints > 0) parts.push(theme.fg("muted", `${s.constraints} constraints`));
+        parts.push(theme.fg("muted", `${s.relations} relations`));
+        parts.push(theme.fg("muted", `${s.artifacts} artifacts`));
+        parts.push(theme.fg("dim", ` (${keyText("app.tools.expand")} to expand)`));
+        return new Text(parts.join(" "), 0, 0);
+      }
+      // Expanded: show full text but capped at a reasonable length
+      const lines = text.split("\n");
+      const maxLines = 60;
+      if (lines.length <= maxLines) {
+        return new Text(text, 0, 0);
+      }
+      const head = lines.slice(0, maxLines).join("\n");
+      return new Text(`${head}\n${theme.fg("muted", `... ${lines.length - maxLines} more lines`)}`, 0, 0);
     },
   });
 
@@ -588,6 +633,29 @@ export async function registerTools(
         items,
       });
     },
+    renderResult(result: any, { expanded }: { expanded: boolean }, theme: any) {
+      const text = result.content?.[0]?.text || "";
+      const count: number = result.details?.count ?? 0;
+      if (count === 0) {
+        return new Text(theme.fg("dim", "No closure gaps."), 0, 0);
+      }
+      if (!expanded) {
+        const ready = result.details?.items?.filter((i: any) => i.ready_for_stable).length ?? 0;
+        const blocked = count - ready;
+        return new Text(
+          theme.fg("accent", `${count} gaps`) +
+            (ready > 0 ? theme.fg("success", ` (${ready} ready)`) : "") +
+            (blocked > 0 ? theme.fg("warning", ` (${blocked} blocked)`) : "") +
+            theme.fg("dim", ` (${keyText("app.tools.expand")} to expand)`),
+          0, 0,
+        );
+      }
+      const lines = text.split("\n");
+      const maxLines = 40;
+      if (lines.length <= maxLines) return new Text(text, 0, 0);
+      const head = lines.slice(0, maxLines).join("\n");
+      return new Text(`${head}\n${theme.fg("muted", `... ${lines.length - maxLines} more lines`)}`, 0, 0);
+    },
   });
 
   // ── esr_list_tasks ────────────────────────────────────
@@ -633,6 +701,32 @@ export async function registerTools(
         count: items.length,
         items,
       });
+    },
+    renderResult(result: any, { expanded }: { expanded: boolean }, theme: any) {
+      const text = result.content?.[0]?.text || "";
+      const count: number = result.details?.count ?? 0;
+      if (count === 0) {
+        return new Text(theme.fg("dim", "No tasks."), 0, 0);
+      }
+      if (!expanded) {
+        const items = result.details?.items ?? [];
+        const byState: Record<string, number> = {};
+        for (const t of items) byState[t.task_state] = (byState[t.task_state] || 0) + 1;
+        const stateParts = Object.entries(byState).map(([st, n]) => {
+          const color = st === "active" ? "warning" : st === "stable" ? "success" : "dim";
+          return theme.fg(color, `${n} ${st}`);
+        });
+        return new Text(
+          theme.fg("accent", `${count} tasks`) + " (" + stateParts.join(", ") + ")" +
+            theme.fg("dim", ` (${keyText("app.tools.expand")} to expand)`),
+          0, 0,
+        );
+      }
+      const lines = text.split("\n");
+      const maxLines = 40;
+      if (lines.length <= maxLines) return new Text(text, 0, 0);
+      const head = lines.slice(0, maxLines).join("\n");
+      return new Text(`${head}\n${theme.fg("muted", `... ${lines.length - maxLines} more lines`)}`, 0, 0);
     },
   });
 

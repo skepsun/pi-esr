@@ -6,7 +6,9 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { keyText } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import type { ESRMemoryProvider } from "@pi-esr/memory-bridge";
 import { SqliteMemoryProvider } from "@pi-esr/memory-bridge";
@@ -118,6 +120,20 @@ export function registerMemoryTools(pi: ExtensionAPI, store: ESRMemoryProvider):
       }).join("\n");
       return okText(text, { action: "esr_mem_recall", count: results.length, results });
     },
+    renderResult(result: any, { expanded }: { expanded: boolean }, theme: any) {
+      const text = result.content?.[0]?.text || "";
+      const count: number = result.details?.count ?? 0;
+      if (count === 0 || text.startsWith("No memories")) {
+        return new Text(theme.fg("dim", "No memories found."), 0, 0);
+      }
+      if (!expanded) {
+        return new Text(
+          theme.fg("accent", `${count} memories`) + theme.fg("dim", ` (${keyText("app.tools.expand")} to expand)`),
+          0, 0,
+        );
+      }
+      return new Text(text, 0, 0);
+    },
   });
 
   // ── esr_mem_timeline ──────────────────────────────────────
@@ -151,6 +167,22 @@ export function registerMemoryTools(pi: ExtensionAPI, store: ESRMemoryProvider):
       ].join("\n");
 
       return okText(text, { action: "esr_mem_timeline", entity_id: entityId, count: entries.length });
+    },
+    renderResult(result: any, { expanded }: { expanded: boolean }, theme: any) {
+      const text = result.content?.[0]?.text || "";
+      const count: number = result.details?.count ?? 0;
+      const entityId = result.details?.entity_id as string || "?";
+      if (count === 0 || text.startsWith("No memories")) {
+        return new Text(theme.fg("dim", `No timeline entries for ${entityId}.`), 0, 0);
+      }
+      if (!expanded) {
+        return new Text(
+          theme.fg("accent", `${count} entries`) + " for " + theme.fg("accent", entityId) +
+            theme.fg("dim", ` (${keyText("app.tools.expand")} to expand)`),
+          0, 0,
+        );
+      }
+      return new Text(text, 0, 0);
     },
   });
 
@@ -200,6 +232,26 @@ export function registerMemoryTools(pi: ExtensionAPI, store: ESRMemoryProvider):
           : entries.map(e => `[${e.entity_id}] ${e.created_at.slice(0, 16)}: ${e.transition}`).join("\n");
         return okText(text, { action: "esr_mem_journal", count: entries.length });
       }
+    },
+    renderResult(result: any, { expanded }: { expanded: boolean }, theme: any) {
+      const text = result.content?.[0]?.text || "";
+      // Record action: always short, show as-is
+      if (result.details?.transition) {
+        return new Text(text, 0, 0);
+      }
+      const count: number = result.details?.count ?? 0;
+      if (count === 0 || text.includes("(no journal entries)")) {
+        return new Text(theme.fg("dim", "No journal entries."), 0, 0);
+      }
+      if (!expanded) {
+        const eid = result.details?.entity_id ? ` for ${result.details.entity_id}` : "";
+        return new Text(
+          theme.fg("accent", `${count} entries`) + eid +
+            theme.fg("dim", ` (${keyText("app.tools.expand")} to expand)`),
+          0, 0,
+        );
+      }
+      return new Text(text, 0, 0);
     },
   });
 }
