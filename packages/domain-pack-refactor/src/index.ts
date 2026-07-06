@@ -71,7 +71,7 @@ const REFACTOR_CHECKS = [
 
 export const refactorPack: ESRDomainPack = {
   name: "refactor",
-  version: "0.6.3",
+  version: "0.1.0",
   description:
     "Refactoring pack: understand current → extract interface → migrate callers → remove old → verify behavior → update docs.",
 

@@ -6,7 +6,7 @@ import type {
 
 export const govdocPack: ESRDomainPack = {
   name: "govdoc",
-  version: "0.6.3",
+  version: "0.1.0",
   description: "Government and enterprise document pack for proposals, requests, and work reports.",
 
   async detect(input) {

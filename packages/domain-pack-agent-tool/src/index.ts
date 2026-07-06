@@ -73,7 +73,7 @@ const TOOL_CHECKS = [
 
 export const agentToolPack: ESRDomainPack = {
   name: "agent-tool",
-  version: "0.6.3",
+  version: "0.1.0",
   description:
     "Agent tool / MCP server / plugin development pack: tool contracts, schema design, error taxonomy, timeout strategy, and idempotency.",
 

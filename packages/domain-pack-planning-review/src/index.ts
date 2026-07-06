@@ -32,7 +32,7 @@ const REFERENCE_BASELINES: ESRPackReferenceBaseline[] = [
 
 export const planningReviewPack: ESRDomainPack = {
   name: "planning-review",
-  version: "0.6.3",
+  version: "0.1.0",
   description: "Planning review pack for strategy alignment, indicator completeness, and audit closure.",
 
   async detect(input) {

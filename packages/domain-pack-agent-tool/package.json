@@ -1,6 +1,6 @@
 {
   "name": "@pi-esr/domain-pack-agent-tool",
-  "version": "0.6.3",
+  "version": "0.1.0",
   "description": "Agent tool / MCP server / plugin development domain pack for pi-esr",
   "type": "module",
   "main": "./dist/index.js",

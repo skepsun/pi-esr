@@ -1,6 +1,6 @@
 {
   "name": "@pi-esr/domain-pack-software",
-  "version": "0.6.3",
+  "version": "0.5.1",
   "description": "Software engineering example domain pack for pi-esr",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,6 +1,6 @@
 {
   "name": "@pi-esr/domain-pack-planning-review",
-  "version": "0.6.3",
+  "version": "0.5.1",
   "description": "Planning review and strategic audit example domain pack for pi-esr",
   "type": "module",
   "main": "./dist/index.js",
